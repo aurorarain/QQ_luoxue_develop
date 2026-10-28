@@ -1,0 +1,29 @@
+services:
+  astrbot:
+    image: soulter/astrbot:latest
+    restart: unless-stopped
+    environment:
+      TZ: Asia/Shanghai
+      FISH_AUDIO_API_KEY: ${FISH_AUDIO_API_KEY:-}
+      FISH_AUDIO_MODEL: ${FISH_AUDIO_MODEL:-s2.1-pro-free}
+      FISH_AUDIO_REFERENCE_ID: ${FISH_AUDIO_REFERENCE_ID:-}
+      FISH_AUDIO_PROXY: ${FISH_AUDIO_PROXY:-}
+    ports:
+      - "127.0.0.1:6185:6185"
+    volumes:
+      - ./data:/AstrBot/data
+  napcat:
+    image: mlikiowa/napcat-docker:latest
+    restart: unless-stopped
+    hostname: luoxue-qq
+    shm_size: 256m
+    stop_grace_period: 45s
+    environment:
+      TZ: Asia/Shanghai
+      MODE: astrbot
+    ports:
+      - "127.0.0.1:6099:6099"
+    volumes:
+      - ./data:/AstrBot/data
+      - ./napcat/config:/app/napcat/config
+      - ./ntqq:/app/.config/QQ

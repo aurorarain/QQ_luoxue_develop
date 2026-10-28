@@ -1,0 +1,14 @@
+{
+  "owner_qq": "YOUR_OWNER_QQ",
+  "group_qq": "YOUR_GROUP_QQ",
+  "bot_qq": "YOUR_BOT_QQ",
+  "web_proxy": null,
+  "image_api": {
+    "base_url": "https://YOUR_IMAGE_PROVIDER/v1",
+    "api_key": "",
+    "model": "",
+    "daily_limit": 3,
+    "size": "1024x1024",
+    "proxy": null
+  }
+}
