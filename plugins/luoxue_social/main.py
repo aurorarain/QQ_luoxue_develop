@@ -77,6 +77,13 @@ class PrivateDrawing(filter.CustomFilter):
                 bool(re.search(r'画(?:一张|个|张|图)|生成.{0,4}(?:图|图片)|draw\s',event.get_message_str() or '',re.I)))
 
 
+class PrivateBilibili(filter.CustomFilter):
+    def filter(self,event,cfg):
+        text=event.get_message_str() or ''
+        return (event.is_private_chat() and str(event.get_sender_id())==OWNER and
+                bool(re.search(r'B站|哔哩|bilibili',text,re.I)) and bool(re.search(r'刷|看|逛|读|热门',text)))
+
+
 SAFE_TOOLS = {'read_memory_detail','read_todo','update_profile','update_soul','observe_growth',
               'forget_growth','reset_profile','reset_soul','create_memory','update_memory',
               'delete_memory','create_todo','complete_todo','update_todo','delete_todo',
@@ -154,6 +161,11 @@ class Social(Star):
             logger.warning('[luoxue_image] request failed: %s',type(exc).__name__)
             await event.send(MessageChain([Plain('这次绘图接口没成功，稍后再试。')]))
 
+    @filter.custom_filter(PrivateBilibili, priority=120)
+    async def private_bilibili(self,event):
+        event.stop_event()
+        await self.features.bilibili_request(event,event.get_message_str() or '')
+
     async def initialize(self):
         self.task = asyncio.create_task(self.loop())
         logger.info('[luoxue_social] owner-only proactive; isolated group; qzone decision enabled')
@@ -210,6 +222,8 @@ class Social(Star):
         text = '（戳了洛雪一下，请自然回应，别泄露私聊）' if poke else event.get_message_str()
         self.add('group', sender, text)
         try:
+            if await self.features.bilibili_request(event,text):
+                return
             if await self.features.draw_request(event, text):
                 return
             roster = await self.features.roster()

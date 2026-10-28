@@ -129,4 +129,27 @@ class Boundaries(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(f.choose_meme('开心',False,'group').name,'fish.gif')
         self.assertNotEqual(f.choose_meme('喜欢',False,'group').name,'kiss.gif')
 
+    async def test_plain_mentions_become_real_components(self):
+        from astrbot.api.message_components import At
+        f=features.Features.__new__(features.Features)
+        f.roster_cache=[{'qq':'90001','name':'test'}]
+        f.choose_meme=lambda *a:None
+        for text in ['你好 @90001','你好@90001','你好 [at:90001]','你好 [CQ:at,qq=90001]']:
+            chain=f.reply_chain(text,False,'group')
+            mentions=[c for c in chain if isinstance(c,At)]
+            self.assertEqual(len(mentions),1)
+            self.assertEqual(str(mentions[0].qq),'90001')
+            if hasattr(mentions[0],'toDict'):
+                self.assertEqual(mentions[0].toDict(),{'type':'at','data':{'qq':'90001'}})
+        self.assertFalse(any(isinstance(c,At) for c in f.reply_chain('@99999',False,'group')))
+
+    async def test_bilibili_request_reaches_reader(self):
+        f=features.Features.__new__(features.Features)
+        calls=[]
+        async def read():calls.append(True);return [{'title':'公开标题','url':'https://www.bilibili.com/video/BVtest'}]
+        f.read_bilibili=read
+        e=Event(text='自己刷会B站')
+        self.assertTrue(await f.bilibili_request(e,e.text))
+        self.assertEqual(len(calls),1);self.assertEqual(len(e.sent),1)
+
 if __name__=='__main__':unittest.main()

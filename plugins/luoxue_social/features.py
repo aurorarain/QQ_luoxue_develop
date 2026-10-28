@@ -208,6 +208,10 @@ class Features:
     def reply_chain(self,text,private,session):
         chain=[]
         valid={x['qq'] for x in self.roster_cache}
+        # Models sometimes emit plain @digits or CQ markup instead of our preferred marker.
+        # Normalize only real roster IDs; text alone is never sent as an @ substitute.
+        text=re.sub(r'\[CQ:at,qq=(\d+)\]',r'[at:\1]',text)
+        text=re.sub(r'(?<![A-Za-z0-9_@\]])[@＠](\d{5,12})(?!\d)',r'[at:\1]',text)
         matches=list(re.finditer(r'\[at:(\d+)\]',text))
         if not private and matches and matches[0].group(1) in valid:
             chain.append(At(qq=matches[0].group(1)))
@@ -222,7 +226,40 @@ class Features:
         return chain
 
     async def send_reply(self,event,text):
-        await event.send(MessageChain(self.reply_chain(text,event.is_private_chat(),event.unified_msg_origin)))
+        chain=self.reply_chain(text,event.is_private_chat(),event.unified_msg_origin)
+        if (not event.is_private_chat() and not any(isinstance(c,At) for c in chain)
+            and re.search(r'(?:@|艾特|at)我',event.get_message_str() or '',re.I)
+            and str(event.get_sender_id()) in {x['qq'] for x in self.roster_cache}):
+            chain.insert(0,At(qq=str(event.get_sender_id())))
+        await event.send(MessageChain(chain))
+
+    async def read_bilibili(self):
+        now=time.time();cache=self.s.state.get('bili_cache',{})
+        if now-cache.get('time',0)<900 and cache.get('items'):return cache['items']
+        body=await fetch('https://api.bilibili.com/x/web-interface/popular?ps=5&pn=1',limit=1_000_000,
+            headers={'User-Agent':'Mozilla/5.0','Referer':'https://www.bilibili.com/'})
+        data=json.loads(body)
+        if data.get('code')!=0:raise RuntimeError('bilibili temporarily unavailable')
+        items=[{'title':x['title'],'url':'https://www.bilibili.com/video/'+x['bvid'],
+                'summary':x.get('desc','')[:500],'source':'B站公开热门标题与简介（未播放视频）','time':now}
+               for x in (data.get('data') or {}).get('list',[])[:5]]
+        if not items:raise RuntimeError('no public items')
+        self.s.state['bili_cache']={'time':now,'items':items}
+        self.s.state['bili_metadata_bytes']=self.s.state.get('bili_metadata_bytes',0)+len(body)
+        self.s.state['discoveries']=(self.s.state.get('discoveries',[])+items[:1])[-30:]
+        self.s.save();return items
+
+    async def bilibili_request(self,event,text):
+        if not re.search(r'B站|哔哩|bilibili',text,re.I) or not re.search(r'刷|看|逛|读|热门',text):return False
+        try:
+            items=await self.read_bilibili()
+            message='我能读公开热门的标题和简介，暂时不播放整段视频。刚读到这几条：\n'+ '\n'.join(
+                f"{i+1}. {x['title']}\n{x['url']}" for i,x in enumerate(items[:3]))
+            await event.send(MessageChain([Plain(message)]))
+        except Exception as exc:
+            logger.info('[luoxue_bilibili] public read failed: %s',type(exc).__name__)
+            await event.send(MessageChain([Plain('这次B站公开接口没读成功，可能是网络或接口限制；我还没有播放、理解视频正文的能力，不能装作看过。')]))
+        return True
 
     async def decorate(self,event):
         result=event.get_result()

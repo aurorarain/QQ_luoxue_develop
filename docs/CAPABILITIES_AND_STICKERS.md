@@ -2,6 +2,8 @@
 
 The owner-only `luoxue_capabilities` tool returns actual loaded-plugin metadata and top-level filenames from `/AstrBot/data/plugins`. It never returns source contents, configuration, arbitrary paths, API keys or credentials. The same manifest is injected into private requests, with a shorter capability summary in group requests. Shell and configuration editing remain disabled.
 
+Group mentions normalize `[at:QQ]`, plain `@QQ`, full-width mentions and CQ-at markup into a real roster-validated At component. Explicit “@我” requests also have a deterministic sender-target fallback. Unknown IDs and @all are not converted. Bilibili read requests now route to the real public reader in both allowed-group chat and owner private chat, rather than asking the language model to pretend to browse. Public results are cached for 15 minutes.
+
 The upstream Blue Fat Fish pack is https://github.com/anka-afk/blue-fat-fish-meme-pack . Its manifest describes 157 animated GIFs across 15 categories; the raw GIF total is approximately 460.43 MiB. The install script fetches only upstream media into the private runtime sticker library and preserves the README/license. These assets are not redistributed in this source repository; upstream does not provide complete original-author/license information and does not grant commercial use.
 
 Fish-pack images are preferred when available, matched by category and excluding the session's five most recent choices. Affection-category stickers are private-only by default. Other private collected images remain private-only as well. Replies can explicitly request an emotion category, or receive a sticker with the existing 22% background probability. This does not mean a sticker is sent on every reply.

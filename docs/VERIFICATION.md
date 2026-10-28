@@ -2,7 +2,7 @@
 
 ## Passed
 
-- 9 boundary regression tests passed in the server AstrBot environment, including read-only capability credential filtering and fish-pack preference/private-affection boundaries.
+- 11 boundary regression tests passed in the server AstrBot environment, including read-only capability credential filtering, fish-pack privacy, real At-component serialization and routing Bilibili chat requests into the reader.
 - Social plugin v2.0.0 loads successfully; OneBot reconnects after AstrBot restart.
 - Real group-member-list API returned a nonempty list (3 members during this deployment).
 - Qzone login/cookie refresh and own-feed read succeeded; the original autonomous post exists.
