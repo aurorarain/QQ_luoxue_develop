@@ -127,7 +127,36 @@ class Boundaries(unittest.IsolatedAsyncioTestCase):
                  {'sha':'fish','scope':'public','category':'开心','file':'fish.gif','pack':'blue-fat-fish'},
                  {'sha':'kiss','scope':'private','category':'喜欢','file':'kiss.gif','pack':'blue-fat-fish'}]
         self.assertEqual(f.choose_meme('开心',False,'group').name,'fish.gif')
-        self.assertNotEqual(f.choose_meme('喜欢',False,'group').name,'kiss.gif')
+        self.assertIsNone(f.choose_meme('喜欢',False,'group'))
+
+    async def test_semantic_stickers_have_no_random_fallback(self):
+        from astrbot.api.message_components import Image
+        f=features.Features.__new__(features.Features)
+        f.s=types.SimpleNamespace(state={},save=lambda:None)
+        f.roster_cache=[];calls=[]
+        f.choose_meme=lambda *args:calls.append(args) or pathlib.Path('/test.gif')
+        for _ in range(10):
+            self.assertFalse(any(isinstance(c,Image) for c in f.reply_chain('普通文字',True,'s')))
+        chain=f.reply_chain('晚安[表情:晚安:abcdef012345]',True,'s')
+        self.assertTrue(any(isinstance(c,Image) for c in chain))
+        self.assertEqual(calls[0][-1],'abcdef012345')
+        self.assertFalse(any(isinstance(c,Image) for c in f.reply_chain('晚安[表情:晚安]',True,'s')))
+        self.assertNotIn('•',features.clean_chat_style('收到 (｡•̀ᴗ-)✧'))
+
+    async def test_companion_daily_is_private_and_bounded(self):
+        import time
+        import datetime
+        from luoxue_social.companion import Companion
+        calls=[]
+        async def generate(prompt,system):calls.append(prompt);return '今天和Alex拌了两句嘴，下次再战。'
+        s=types.SimpleNamespace(state={'private':[{'time':time.time(),'text':'测试素材'}]*4},save=lambda:None,generate=generate)
+        c=Companion(s)
+        self.assertIn('温柔陪伴',c.mood('今天好累'))
+        current=datetime.datetime(2026,10,28,22)
+        await c.daily(current);await c.daily(current)
+        self.assertEqual(len(calls),1)
+        self.assertEqual(len(s.state['companion_diary']),1)
+        self.assertIn('Alex',c.read())
 
     async def test_plain_mentions_become_real_components(self):
         from astrbot.api.message_components import At

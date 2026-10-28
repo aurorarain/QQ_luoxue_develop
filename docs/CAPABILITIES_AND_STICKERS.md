@@ -11,3 +11,13 @@ Fish-pack images are preferred when available, matched by category and excluding
 Screenshot capability is separate from having a platform account. The current integration fetches Bilibili public titles/descriptions and produces explicitly labeled information cards. It does not have a browser, a full video player or authenticated personalized feeds. A bounded single headless browser could be added without a GPU; session login helps with protected content but cannot guarantee bypassing captcha or platform restrictions. Screenshots must remain distinct from generated cards.
 
 Traffic budget examples (estimates, not a provider bill): public JSON metadata is usually KB-scale per request; full video at 2 Mbit/s uses about 150 MB per ten minutes, and 5 Mbit/s about 375 MB. Daily ten-minute viewing is about 4.5 GB or 11.25 GB per 30 days respectively, excluding all other traffic. Screenshot pages additionally download JS/images; actual traffic depends on page resources and whether playback is blocked. Server memory/disk availability does not prove its monthly traffic quota or remaining bill allowance.
+# 2026-10-28 表情与说说调整
+
+- 模型收到表情分类和肥鱼素材文件名含义、图片 ID 对照，使用 `[表情:分类:图片id]` 选择；文件名标签不等于视觉识别。
+- 禁止随机跨分类兜底；同分类未指定 ID 时选最少使用的素材。普通回复至少隔四轮和五分钟，私人素材不进群提示。
+- 明确图片/GIF发送能力；停用旧人设中的高频颜文字要求，输出清理常见装饰颜文字。
+- 说说默认纯文字，35%尝试搜索公共领域/CC0图片，仍经过相关性审查；失败不阻塞文字发布。每日最多一次发布尝试。
+- 文案10–120字，具体观察和笑点优先；没有新内容可以不发，禁止捏造经历或透露私聊内容。
+- 服务器容器边界测试13项通过；真实QQ展示及下一次自主说说仍需自然事件验证。
+- 新增自有轻量陪伴模块：私聊角色心境余温三小时衰减；22点后有当日真实私聊素材才写日记，每日最多尝试一次，仅保留30篇。`/洛雪日记`只允许主人私聊读取最近三篇，群内不可读取，不自动发群或说说。
+- 调研参考：`zzby-poi/astrbot_plugin_weather`（包含主动推送，暂未安装）、`menglimi/astrbot_plugin_private_companion`（与现有主动聊天/记忆重叠，未安装）；`976230600/astrbot_plugin_daily_note`仓库当前404。没有复制这些第三方实现。
