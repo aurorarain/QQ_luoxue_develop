@@ -30,6 +30,7 @@ def safe_public_text(text):
 
 async def fetch(url, proxy=None, limit=5_000_000, json_body=None, headers=None):
     """Public HTTPS only, bounded body, recheck every redirect against SSRF."""
+    headers={'User-Agent':'QQ-Luoxue/2.0 (https://github.com/aurorarain/QQ_luoxue_develop)', **(headers or {})}
     for _ in range(4):
         parsed = urlparse(url)
         if parsed.scheme != 'https' or parsed.username or parsed.password or parsed.port not in (None,443):
@@ -318,7 +319,7 @@ class Features:
             if not query:return []
             from urllib.parse import urlencode
             url='https://commons.wikimedia.org/w/api.php?'+urlencode({'action':'query','format':'json','generator':'search',
-                'gsrsearch':query,'gsrnamespace':6,'gsrlimit':2,'prop':'imageinfo','iiprop':'url|extmetadata','iiurlwidth':800})
+                'gsrsearch':query+' incategory:CC-Zero','gsrnamespace':6,'gsrlimit':2,'prop':'imageinfo','iiprop':'url|extmetadata','iiurlwidth':800})
             data=json.loads(await fetch(url,proxy=self.cfg.get('web_proxy'),limit=500000))
             for page in data.get('query',{}).get('pages',{}).values():
                 info=page.get('imageinfo',[{}])[0];image=info.get('thumburl') or info.get('url','')
@@ -326,9 +327,20 @@ class Features:
                 if license not in ('CC0','Public domain'):continue
                 if not re.search(r'\.(png|jpe?g)(?:$|\?)',image,re.I):continue
                 if not image.startswith('https://upload.wikimedia.org/'):continue
-                await fetch(image,proxy=self.cfg.get('web_proxy'),limit=5_000_000)
+                body=await fetch(image,proxy=self.cfg.get('web_proxy'),limit=5_000_000)
+                from PIL import Image as PILImage
+                import io
+                with PILImage.open(io.BytesIO(body)) as photo:
+                    if photo.width*photo.height>4_000_000:continue
+                    mime='image/png' if photo.format=='PNG' else 'image/jpeg'
+                provider=await self.s.context.get_using_provider_async(self.s.state.get('owner_umo'))
+                review=await provider.text_chat(prompt='判断图片是否与这条公开说说有关且适合公开，不含敏感/真人隐私/二维码。只输出JSON {"suitable":true或false}。说说：'+text,
+                    image_urls=['data:'+mime+';base64,'+base64.b64encode(body).decode()],contexts=[],persist=False)
+                if parse_json(review.completion_text).get('suitable') is not True:continue
                 self.s.state['last_image_source']=info.get('descriptionurl','');self.s.save()
-                return [image]
+                path=self.root/('illustration-'+str(time.time_ns())+('.png' if mime=='image/png' else '.jpg'))
+                path.write_bytes(body)
+                return [str(path)]
         except Exception as exc:logger.info('[luoxue_media] illustration search skipped: %s',type(exc).__name__)
         return []
 
