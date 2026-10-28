@@ -14,6 +14,7 @@ c=json.loads(config.read_text(encoding='utf-8-sig'))
 settings=json.loads((ROOT/'config/luoxue_social_settings.json').read_text(encoding='utf-8-sig'))
 owner=str(settings['owner_qq']);group=str(settings['group_qq'])
 c['admins_id']=[owner]
+c['disable_builtin_commands']=True # QQ-side plugin/config administration is intentionally disabled.
 c['platform_settings'].update(enable_id_white_list=True,id_whitelist=[group,'napcat:FriendMessage:'+owner],
     wl_ignore_admin_on_group=False,wl_ignore_admin_on_friend=True,ignore_bot_self_message=True,ignore_at_all=True)
 for role in ('admin','member'):
