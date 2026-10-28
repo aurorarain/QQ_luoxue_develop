@@ -182,6 +182,18 @@ class Boundaries(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(mentions[0].toDict(),{'type':'at','data':{'qq':'90001'}})
         self.assertFalse(any(isinstance(c,At) for c in f.reply_chain('@99999',False,'group')))
 
+    async def test_group_fallback_decoration_keeps_public_scope(self):
+        from astrbot.api.message_components import Plain,At
+        f=features.Features.__new__(features.Features)
+        f.s=types.SimpleNamespace(state={},save=lambda:None)
+        f.roster_cache=[{'qq':'90001','name':'test'}]
+        result=types.SimpleNamespace(chain=[Plain('[at:90001] 回来啦')])
+        event=Event()
+        event.get_result=lambda:result
+        await f.decorate(event)
+        self.assertTrue(any(isinstance(c,At) for c in result.chain))
+        self.assertNotIn('[at:', ''.join(c.text for c in result.chain if isinstance(c,Plain)))
+
     async def test_bilibili_request_reaches_reader(self):
         f=features.Features.__new__(features.Features)
         calls=[]

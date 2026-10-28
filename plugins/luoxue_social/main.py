@@ -309,7 +309,10 @@ class Social(Star):
 
     @filter.on_decorating_result()
     async def private_meme(self, event):
-        if event.is_private_chat() and str(event.get_sender_id()) == OWNER:
+        if ((event.is_private_chat() and str(event.get_sender_id()) == OWNER)
+                or (not event.is_private_chat() and str(event.get_group_id()) == GROUP)):
+            if not event.is_private_chat():
+                await self.features.roster()
             await self.features.decorate(event)
 
     def qzone_plugin(self):
