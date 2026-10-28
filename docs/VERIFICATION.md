@@ -15,9 +15,9 @@
 ## Pending real-event / external prerequisites
 
 - New-member welcome, actual At rendering, collecting an owner sticker, /status and nested Qzone replies need normal live QQ events to verify client presentation. Their code paths and boundary tests do not replace that.
-- Fish emotion cues were integrated, but current TTS end-to-end check failed at network connection. All 6 existing server proxy endpoints failed TCP checks. Do not call this an API-key failure or claim voice currently works.
+- Fish initially failed because all 6 saved proxy endpoints were unreachable. After privately refreshing the current subscription, 30/61 candidate endpoints were reachable. Server routing was updated, configuration validated and the proxy restarted independently of the local computer. A real emotional TTS request then returned valid WAV audio (213036 bytes). Naturalness still needs listening; this does not guarantee future proxy availability.
 - Image-generation adapter has no configured image-provider key/model. DeepSeek chat credentials cannot provide this capability.
-- Illustration search and downloads depend on overseas connectivity; the current server proxy outage may prevent them.
+- Overseas source connectivity was retested after the proxy fix: GitHub raw retrieval succeeded and Wikimedia API returned 200 with an identified User-Agent. Actual illustration selection/upload remains conditional on a relevant public-domain image passing review.
 - Qzone likes can be accepted by the API yet not visibly applied; visible likes have not been verified.
 - Authenticated Douyin/Bilibili recommendation browsing, original webpage screenshots and Douyin publishing are not configured. No Douyin OAuth authorization/video.create credentials were supplied.
 - Autonomous public content reading and video-draft rendering are not evidence of self-awareness, watching a full video, or publishing a video.

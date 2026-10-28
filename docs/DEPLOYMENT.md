@@ -28,6 +28,8 @@
 
 默认继续现有Fish音色和模型，不切换收费档。S2方括号情绪提示由`voice_control.py`添加，剔除表情标签和舞台动作。HTTP成功只能证明合成成功，情绪是否自然还需实际试听。
 
+代理订阅节点可能过期。维护脚本`refresh_proxy_candidates.py`可从私有导出的proxies JSON中选出TCP可达候选，生成Fish/海外素材走代理、其余直连的规则；输入包含订阅凭据，权限必须600，不能提交Git。生成后先用Mihomo配置校验，再重启代理，再实测Fish请求。TCP可达和gstatic健康测试都不能代替实际TTS验证。
+
 可选API：MiniMax Speech系列有emotion与语气词控制；阿里云CosyVoice部分模型/音色支持情绪。都需独立凭据和音色试听，不保证能复用Fish参考ID。
 
 官方参考：
