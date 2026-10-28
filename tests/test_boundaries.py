@@ -68,6 +68,16 @@ class Boundaries(unittest.IsolatedAsyncioTestCase):
         await social.tool_safety(Event(sender='90001',private=True),req)
         self.assertEqual(req.func_tool.tools,[])
 
+    async def test_group_fallback_replaces_private_persona(self):
+        social=main.Social.__new__(main.Social)
+        social.features=types.SimpleNamespace(public_instructions=lambda sender:'PUBLIC_CAPABILITIES')
+        social.group_memory=lambda text:[{'text':'public record'}]
+        req=types.SimpleNamespace(system_prompt='PRIVATE_CANARY',contexts=[{'content':'SECRET_CANARY'}],prompt='',func_tool=None)
+        await social.tool_safety(Event(),req)
+        self.assertNotIn('PRIVATE_CANARY',req.system_prompt)
+        self.assertEqual(req.contexts,[])
+        self.assertTrue(req.prompt)
+
     async def test_group_cannot_read_private_archive(self):
         import sqlite3
         social=main.Social.__new__(main.Social)

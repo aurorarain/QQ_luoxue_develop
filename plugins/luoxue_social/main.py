@@ -281,6 +281,14 @@ class Social(Star):
 
     @filter.on_llm_request(priority=-10000)
     async def tool_safety(self, event, req):
+        # Core fallback can handle a bare @ before our explicit public handler.
+        # Never let that fallback inherit the private default persona/history.
+        if not event.is_private_chat() and str(event.get_group_id())==GROUP:
+            req.system_prompt=PUBLIC+self.features.public_instructions(str(event.get_sender_id()))
+            req.system_prompt+='\n仅公开群记录：'+json.dumps(self.group_memory(event.get_message_str()),ensure_ascii=False)
+            req.contexts=[]
+            if not req.prompt:
+                req.prompt='群友@了你，没有附带文字。自然简短回应一句。'
         if req.func_tool:
             import copy
             req.func_tool = copy.copy(req.func_tool)
