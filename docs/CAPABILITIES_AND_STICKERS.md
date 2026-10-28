@@ -1,0 +1,11 @@
+# Read-only capability awareness and Blue Fat Fish stickers
+
+The owner-only `luoxue_capabilities` tool returns actual loaded-plugin metadata and top-level filenames from `/AstrBot/data/plugins`. It never returns source contents, configuration, arbitrary paths, API keys or credentials. The same manifest is injected into private requests, with a shorter capability summary in group requests. Shell and configuration editing remain disabled.
+
+The upstream Blue Fat Fish pack is https://github.com/anka-afk/blue-fat-fish-meme-pack . Its manifest describes 157 animated GIFs across 15 categories; the raw GIF total is approximately 460.43 MiB. The install script fetches only upstream media into the private runtime sticker library and preserves the README/license. These assets are not redistributed in this source repository; upstream does not provide complete original-author/license information and does not grant commercial use.
+
+Fish-pack images are preferred when available, matched by category and excluding the session's five most recent choices. Affection-category stickers are private-only by default. Other private collected images remain private-only as well. Replies can explicitly request an emotion category, or receive a sticker with the existing 22% background probability. This does not mean a sticker is sent on every reply.
+
+Screenshot capability is separate from having a platform account. The current integration fetches Bilibili public titles/descriptions and produces explicitly labeled information cards. It does not have a browser, a full video player or authenticated personalized feeds. A bounded single headless browser could be added without a GPU; session login helps with protected content but cannot guarantee bypassing captcha or platform restrictions. Screenshots must remain distinct from generated cards.
+
+Traffic budget examples (estimates, not a provider bill): public JSON metadata is usually KB-scale per request; full video at 2 Mbit/s uses about 150 MB per ten minutes, and 5 Mbit/s about 375 MB. Daily ten-minute viewing is about 4.5 GB or 11.25 GB per 30 days respectively, excluding all other traffic. Screenshot pages additionally download JS/images; actual traffic depends on page resources and whether playback is blocked. Server memory/disk availability does not prove its monthly traffic quota or remaining bill allowance.

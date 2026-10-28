@@ -80,10 +80,10 @@ class PrivateDrawing(filter.CustomFilter):
 SAFE_TOOLS = {'read_memory_detail','read_todo','update_profile','update_soul','observe_growth',
               'forget_growth','reset_profile','reset_soul','create_memory','update_memory',
               'delete_memory','create_todo','complete_todo','update_todo','delete_todo',
-              'clear_todo','add_memo_block','write_memo_block','delete_memo_block','speak','sing'}
+              'clear_todo','add_memo_block','write_memo_block','delete_memo_block','speak','sing','luoxue_capabilities'}
 
 
-@register('luoxue_social', 'Mia', '隔离群人格、单向记忆、戳一戳、自主私聊与说说', '1.0.0')
+@register('luoxue_social', 'Mia', '隔离群人格、单向记忆、戳一戳、自主私聊与说说', '2.1.0')
 class Social(Star):
     def __init__(self, context):
         super().__init__(context)
@@ -264,6 +264,13 @@ class Social(Star):
             allowed = SAFE_TOOLS if event.is_private_chat() and str(event.get_sender_id()) == OWNER else set()
             req.func_tool.tools = [t for t in req.func_tool.tools if t.name in allowed]
 
+    @filter.llm_tool(name='luoxue_capabilities')
+    async def capability_tool(self,event: AstrMessageEvent) -> str:
+        """只读查看自己当前插件目录的文件名、插件版本及能力是否真正可用。不读取源码、配置、密钥或任意路径。"""
+        if not event.is_private_chat() or str(event.get_sender_id())!=OWNER:
+            return '只有Alex私聊可以查看详细插件清单。'
+        return json.dumps(self.features.capabilities(),ensure_ascii=False)
+
     @filter.on_llm_response()
     async def private_response(self, event, response):
         if event.is_private_chat() and str(event.get_sender_id()) == OWNER:
@@ -335,7 +342,7 @@ Alex很久没来时可以有轻微想念，不公开其隐私，不控诉不制�
             self.save()
             text = await self.decide('private')
             if text:
-                chain=[Plain(text)]
+                chain=self.features.reply_chain(text,True,umo)
                 discoveries=self.state.get('discoveries',[])
                 if discoveries and random.random()<.2:
                     item=discoveries[-1]

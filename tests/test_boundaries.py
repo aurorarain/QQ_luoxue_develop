@@ -109,4 +109,24 @@ class Boundaries(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn('表情:',voice.prepare_voice('晚安[表情:晚安]'))
         self.assertNotIn('脸红',voice.prepare_voice('（脸红）才不是呢'))
 
+    async def test_capabilities_never_expose_api_credentials(self):
+        f=features.Features.__new__(features.Features)
+        f.cfg={'image_api':{'api_key':'SECRET_API_CANARY'}}
+        meta=types.SimpleNamespace(root_dir_name='uninstalled-example',name='example',version='1.0',activated=True)
+        f.s=types.SimpleNamespace(context=types.SimpleNamespace(get_all_stars=lambda:[meta]))
+        result=f.capabilities()
+        self.assertEqual(result['plugins'][0]['files'],[])
+        self.assertEqual(result['features']['image_generation'],'configured')
+        self.assertNotIn('SECRET_API_CANARY',json.dumps(result))
+
+    async def test_fish_pack_preferred_without_leaking_affection(self):
+        f=features.Features.__new__(features.Features)
+        f.s=types.SimpleNamespace(state={},save=lambda:None)
+        f.library=pathlib.Path('/not-used');f._save_index=lambda:None
+        f.index=[{'sha':'starter','scope':'public','category':'开心','file':'starter.png'},
+                 {'sha':'fish','scope':'public','category':'开心','file':'fish.gif','pack':'blue-fat-fish'},
+                 {'sha':'kiss','scope':'private','category':'喜欢','file':'kiss.gif','pack':'blue-fat-fish'}]
+        self.assertEqual(f.choose_meme('开心',False,'group').name,'fish.gif')
+        self.assertNotEqual(f.choose_meme('喜欢',False,'group').name,'kiss.gif')
+
 if __name__=='__main__':unittest.main()
