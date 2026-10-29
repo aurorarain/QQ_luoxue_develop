@@ -11,6 +11,11 @@ class Companion:
         self.s=social
 
     def mood(self,text):
+        # A reviewed relationship plugin owns emotional continuity when active.
+        context = getattr(self.s, 'context', None)
+        if context and any(getattr(meta, 'name', '') == 'astrbot_plugin_relationship'
+                           and getattr(meta, 'activated', False) for meta in context.get_all_stars()):
+            return ''
         previous=self.s.state.get('companion_mood',{})
         label=previous.get('label','平静')
         if time.time()-previous.get('time',0)>10800:label='平静'
