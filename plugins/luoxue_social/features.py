@@ -16,6 +16,7 @@ from astrbot.api import logger
 from astrbot.api.event import filter
 from astrbot.api.message_components import At, Image, Plain
 from astrbot.core.message.message_event_result import MessageChain
+from .output_guard import guard_output
 
 CATEGORIES = ['开心','傲娇','生气','委屈','惊讶','无语','晚安','喜欢','害羞','吃饭','金钱','问候','工作','娱乐','回应']
 
@@ -235,6 +236,7 @@ class Features:
                         'screenshot_browser':False,'douyin_publish':False,'shell_and_config_writes':False}}
 
     def reply_chain(self,text,private,session):
+        text=guard_output(text)
         chain=[]
         valid={x['qq'] for x in self.roster_cache}
         # Models sometimes emit plain @digits or CQ markup instead of our preferred marker.
@@ -315,8 +317,12 @@ class Features:
                 '；自主活动：公开资讯；抖音发布：未授权。')
 
     async def draw_request(self,event,text):
-        if not re.search(r'画(?:一张|个|张|图)|生成.{0,4}(?:图|图片)|draw\s',text,re.I):return False
-        api=self.cfg.get('image_api',{})
+        from .image_policy import premium_request,select_image_request
+        if not premium_request(text) and not re.search(r'画(?:一张|个|张|图)|生成.{0,4}(?:图|图片)|draw\s',text,re.I):return False
+        try:model,size,prompt=select_image_request(text,event.get_sender_id(),self.owner)
+        except (PermissionError,ValueError) as exc:
+            await event.send(MessageChain([Plain(str(exc))]));return True
+        api={**self.cfg.get('image_api',{}),'model':model,'size':size}
         if not api.get('api_key') or not api.get('base_url') or not api.get('model'):
             await event.send(MessageChain([Plain('绘图插件已接好，但还缺一个支持生图的API配置。现在的DeepSeek对话密钥不能拿来生图。')]))
             return True
@@ -328,7 +334,7 @@ class Features:
         usage['count']=usage.get('count',0)+1;self.s.save()
         if api.get('provider')=='dashscope':
             from .image_api import generate
-            image=await generate(api,text)
+            image=await generate(api,prompt)
             path=self.root/('drawing-'+str(time.time_ns())+'.png');path.write_bytes(image)
             await event.send(MessageChain([Image.fromFileSystem(str(path))]));return True
         url=api['base_url'].rstrip('/')+'/images/generations'
