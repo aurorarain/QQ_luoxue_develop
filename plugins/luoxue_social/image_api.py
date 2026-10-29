@@ -22,7 +22,10 @@ async def generate(api,prompt):
                 if item.get('image'):return await fetch(item['image'],limit=15_000_000)
         raise RuntimeError('DashScope returned no image')
     if model not in ('wanx2.0-t2i-turbo','wan2.2-t2i-flash'):raise ValueError('Unsupported image model')
-    payload={'model':model,'input':{'prompt':prompt[:800]},'parameters':{'size':api.get('size','1024*1024'),'n':1}}
+    size=api.get('size','1024*1024')
+    if model=='wanx2.0-t2i-turbo' and size not in ('768*768','576*1024','1024*576','1024*1024','720*1280','1280*720','864*1152','1152*864'):
+        raise ValueError('Wan 2.0 requires a supported discrete size, e.g. 1024*1024')
+    payload={'model':model,'input':{'prompt':prompt[:800]},'parameters':{'size':size,'n':1}}
     data=json.loads(await fetch(base+'/api/v1/services/aigc/text2image/image-synthesis',
         headers={**headers,'X-DashScope-Async':'enable'},proxy=proxy,json_body=payload,limit=500000))
     task=data.get('output',{}).get('task_id','')
@@ -34,6 +37,8 @@ async def generate(api,prompt):
             out=result.get('output',{})
             if out.get('task_status')=='SUCCEEDED':
                 return await fetch(out['results'][0]['url'],limit=15_000_000)
-            if out.get('task_status') in ('FAILED','CANCELED'):raise RuntimeError('Image task failed')
+            if out.get('task_status') in ('FAILED','CANCELED'):
+                code=str(out.get('code','unknown'))
+                raise RuntimeError('Image task failed: '+(code if re.fullmatch(r'[A-Za-z0-9_.-]{1,100}',code) else 'unknown'))
         raise TimeoutError('Image task still pending; not resubmitted')
     return await asyncio.wait_for(poll(),150)

@@ -87,6 +87,13 @@ class Extensions(unittest.IsolatedAsyncioTestCase):
             self.assertIn('/tasks/test-task-123',call.call_args_list[1].args[0])
             self.assertEqual(sum('json_body' in c.kwargs for c in call.call_args_list),1)
 
+    async def test_wan20_rejects_unsupported_square_before_submit(self):
+        with patch.object(features,'fetch',AsyncMock()) as call:
+            with self.assertRaises(ValueError):
+                await image_api.generate({'base_url':'https://dashscope.aliyuncs.com','api_key':'TEST_CANARY',
+                    'model':'wanx2.0-t2i-turbo','size':'1280*1280'},'test')
+            call.assert_not_awaited()
+
     async def test_empty_tool_runtime_guard(self):
         try:module=importlib.import_module('astrbot.core.agent.runners.tool_loop_agent_runner')
         except ImportError:self.skipTest('requires AstrBot runtime')
