@@ -29,6 +29,8 @@
 
 当前角色、主动群聊与API配置见 [2.2更新说明](docs/2026-10-29-CHARACTER_AND_NETWORK.md)。旧记录中的女友关系、禁群主动、四轮五分钟表情冷却已被本版取代。
 
+服务器独立 HTTPS 后台、五项新增插件及权限适配见 [2.3更新说明](docs/2026-10-29-WEBUI-AND-PLUGINS.md)。实际网址和账号口令单独私下保存。
+
 ## 数据边界
 
 `data/plugin_data/luoxue_social/` 是私有运行数据。不要提交 events.db、state.json、health.json、表情素材、API配置、QQ缓存或聊天记录。

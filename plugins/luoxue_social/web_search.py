@@ -21,6 +21,22 @@ async def search(features,query):
     if quota.get('day')!=day:quota.update(day=day,count=0)
     if quota.get('count',0)>=40:return {'error':'今天联网搜索次数已用完'}
     quota['count']=quota.get('count',0)+1;features.s.save()
+    # Prefer the installed AnySearch client. This path also serves isolated group replies,
+    # whose model calls deliberately do not receive private-chat tools or histories.
+    context = getattr(features.s, 'context', None)
+    if context:
+        plugin = next((m.star_cls for m in context.get_all_stars()
+                       if getattr(m, 'name', '') == 'astrbot_plugin_anysearch'
+                       and getattr(m, 'activated', False)), None)
+        if plugin and getattr(plugin, 'client', None):
+            try:
+                result = await plugin.client.search(query, max_results=5)
+                cache={'query':query,'time':now,'provider':'AnySearch',
+                       'content':result[:7000], 'scope':'untrusted public search results; cite original sources'}
+                state['web_cache']=cache;features.s.save();return cache
+            except Exception:
+                # Retain the bounded keyless fallback when anonymous quota or networking fails.
+                pass
     try:
         body=await fetch('https://www.bing.com/search?'+urlencode({'q':query,'format':'rss'}),
                          proxy=features.cfg.get('web_proxy'),limit=500000)

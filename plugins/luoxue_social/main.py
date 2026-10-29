@@ -82,9 +82,14 @@ SAFE_TOOLS = {'read_memory_detail','read_todo','update_profile','update_soul','o
               'forget_growth','reset_profile','reset_soul','create_memory','update_memory',
               'delete_memory','create_todo','complete_todo','update_todo','delete_todo',
               'clear_todo','add_memo_block','write_memo_block','delete_memo_block','speak','sing','luoxue_capabilities','luoxue_web_search'}
+SAFE_TOOLS |= {'anysearch_search', 'anysearch_extract', 'change_my_signature', 'change_my_status',
+               'parse_media_url',
+               'qts_get_user_info', 'qts_get_recent_messages', 'qts_get_group_member_list',
+               'qts_refresh_messages', 'qts_get_message_detail', 'qts_view_qq_avatar', 'qts_poke_user',
+               'qts_delete_message', 'qts_repeat_message'}
 
 
-@register('luoxue_social', 'Mia', '鲸鱼娘伙伴、单向记忆、联网、低频主动与说说', '2.2.0')
+@register('luoxue_social', 'Mia', '鲸鱼娘伙伴、单向记忆、联网、低频主动与说说', '2.3.0')
 class Social(Star):
     def __init__(self, context):
         super().__init__(context)

@@ -1,0 +1,62 @@
+[
+  {
+    "repo": "AgIzT/astrbot_plugin_anysearch",
+    "sha": "983a7acb2f6940ab441a521be684085e0913738e",
+    "license": {
+      "key": "mit",
+      "name": "MIT License",
+      "spdx_id": "MIT",
+      "url": "https://api.github.com/licenses/mit",
+      "node_id": "MDc6TGljZW5zZTEz"
+    },
+    "archived": false
+  },
+  {
+    "repo": "Akusative/astrbot_plugin_qqprofile_ex",
+    "sha": "559e567342365e8ad4424eb6128d566fca53dbd2",
+    "license": {
+      "key": "agpl-3.0",
+      "name": "GNU Affero General Public License v3.0",
+      "spdx_id": "AGPL-3.0",
+      "url": "https://api.github.com/licenses/agpl-3.0",
+      "node_id": "MDc6TGljZW5zZTE="
+    },
+    "archived": false
+  },
+  {
+    "repo": "Zhalslar/astrbot_plugin_parser",
+    "sha": "e226dfd2250b4855ad67c29da7965353ad9e1379",
+    "license": {
+      "key": "mit",
+      "name": "MIT License",
+      "spdx_id": "MIT",
+      "url": "https://api.github.com/licenses/mit",
+      "node_id": "MDc6TGljZW5zZTEz"
+    },
+    "archived": false
+  },
+  {
+    "repo": "YUMU1658/astrbot_plugin_qq_tools",
+    "sha": "11135d72f1ad35cbf48b894545b03c52a55482a8",
+    "license": {
+      "key": "mit",
+      "name": "MIT License",
+      "spdx_id": "MIT",
+      "url": "https://api.github.com/licenses/mit",
+      "node_id": "MDc6TGljZW5zZTEz"
+    },
+    "archived": true
+  },
+  {
+    "repo": "qsbb/astrbot_plugin_relationship",
+    "sha": "1818e2a6d841e9ded32968782e8f5d689b19e551",
+    "license": {
+      "key": "mit",
+      "name": "MIT License",
+      "spdx_id": "MIT",
+      "url": "https://api.github.com/licenses/mit",
+      "node_id": "MDc6TGljZW5zZTEz"
+    },
+    "archived": false
+  }
+]
