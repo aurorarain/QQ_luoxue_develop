@@ -38,3 +38,10 @@
 - 新增尺寸校验后28项测试通过；万相已完成真实API生成，其余音乐能力仍缺Key和声线试听验证。
 
 参考：https://cloud.tencent.com/document/product/1823/130055 、https://cloud.tencent.cn/document/product/1823/135323 、https://multimedia.tencent.com/zh/docs/smart-music/api/11-singing-cloning/ 、https://fal.ai/legal/terms-of-service 、https://fal.ai/pricing
+
+## 日常生图与命令限制
+
+- 普通生图固定wanx2.0-t2i-turbo、1024×1024。模型名称由可信事件分支选择，不采纳聊天或模型生成的“改用2.6”等文字。
+- 只有配置的主人QQ在自己的私聊或指定群发送以`/精绘26 `开头且带描述的消息，才调用wan2.6-t2i、1280×1280；仅当张生效，下一次普通请求仍为2.0。其他成员即使复制指令也被拒绝，且不消耗额度。日限额仍共同最多3张。
+- 禁止模型尝试环境、Shell或配置命令；危险执行工具仍不在白名单。QQ普通/兜底输出、语音和模型历史记录前增加DSML/工具调用源码/终端命令过滤，避免逐行发送。记忆、成长等安全工具保留。
+- 32项测试通过，包括普通请求文字诱导升级失败、非主人专用指令拒绝、主人单次2.6后回到2.0、命令原文不出QQ/语音。未为本次权限验证额外生成付费图片。

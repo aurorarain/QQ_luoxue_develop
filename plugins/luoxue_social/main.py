@@ -64,8 +64,11 @@ class MemberNotice(filter.CustomFilter):
 
 class PrivateDrawing(filter.CustomFilter):
     def filter(self,event,cfg):
-        return (event.is_private_chat() and str(event.get_sender_id())==OWNER and
-                bool(re.search(r'画(?:一张|个|张|图)|生成.{0,4}(?:图|图片)|draw\s',event.get_message_str() or '',re.I)))
+        from .image_policy import premium_request
+        text=event.get_message_str() or ''
+        return ((event.is_private_chat() and str(event.get_sender_id())==OWNER and
+                (premium_request(text) or bool(re.search(r'画(?:一张|个|张|图)|生成.{0,4}(?:图|图片)|draw\s',text,re.I)))) or
+                (not event.is_private_chat() and str(event.get_group_id())==GROUP and premium_request(text)))
 
 
 class PrivateBilibili(filter.CustomFilter):
@@ -324,6 +327,8 @@ class Social(Star):
 
     @filter.on_llm_response()
     async def private_response(self, event, response):
+        from .output_guard import guard_output
+        response.completion_text=guard_output(response.completion_text or '')
         if event.is_private_chat() and str(event.get_sender_id()) == OWNER:
             self.add('private', '洛雪', response.completion_text or '')
 

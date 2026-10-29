@@ -1,7 +1,9 @@
 """Fish S2 square-bracket delivery cues. No switch to a paid model."""
 import re
+from .output_guard import guard_output
 
 def prepare_voice(text):
+    text=guard_output(text)
     text=re.sub(r'\[表情:[^\]]+\]|\[at:\d+\]','',text)
     text=re.sub(r'[（(][^()（）]{0,30}[）)]','',text).strip()
     text=re.sub(r'\[(?!happy\]|sad\]|calm\]|sarcastic\]|excited\]|whispering\])[^\]]+\]','',text)
