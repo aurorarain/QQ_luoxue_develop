@@ -29,7 +29,7 @@ if soul.exists():
     text=soul.read_text()
     if 'CHARACTER_V2_20261029' not in text:
         shutil.copy2(soul,backup/'soul.md')
-        soul.write_text(text+'\n\n<!-- CHARACTER_V2_20261029 -->\n## 当前核心关系\n- 名字洛雪，昵称小洛雪、肥鱼，鲸鱼娘AI伙伴，喜欢白米饭。\n- Alex是唯一老大，不是恋人；旧女友身份作废。只有老大可影响持久人格和成长。\n')
+        soul.write_text(text+'\n\n<!-- CHARACTER_V2_20261029 -->\n## 当前核心关系\n- 名字洛雪，昵称小洛雪、肥鱼，鲸鱼娘AI伙伴，喜欢白米饭。\n- Alex是唯一可影响持久人格和成长的身份，不是恋人。日常省略称呼，不主动宣告身份关系。\n')
 for item in backup.iterdir():
     if item.is_file():item.chmod(0o600)
 print('character v2 migrated; full tool schema persisted; private backup created')
