@@ -65,3 +65,12 @@ The deployment record intentionally omits private IDs and endpoint credentials.
 - 测试：容器内79项全过（新增`tests/test_memes.py` 7项：提示词体积、群聊不列私人分类、上次发送回显、强情绪提前触发、平静需两轮、冷却阻止连发、marker清理）。
 - 部署：备份 `/opt/luoxue/astrbot/data/social_backups/stickers-20261030-215217`（index.json）与 `stickers-code-20261030-215303`（features.py）；重启后health正常、分类统计确认。
 - 仍需真实QQ验收：表情实际发送频率、观感是否自然、以及连续两次同类是否被正确抑制。
+
+# 2026-10-30 批次1：生图自我评价 + 深夜关心
+
+- 生图自评：`deliver_drawing` 发送成功后异步调度 `review_drawing`，把成图压到长边768以 JPEG data URL 回喂视觉模型，写一句30字内的客观描述存进 `drawing_history[].review`，`drawing_context` 把 review 一并注入，并明确"有 review 才是真读过像素，没有就别编细节"。日上限15次，失败只记日志不影响出图。
+- 视觉链路实测：同一提示词在同一 provider 上，`max_tokens=120` 返回空（推理 token 吃满），`max_tokens=600` 正确返回"纯浅蓝色背景，无具体主体，平铺居中构图"。记录这条是为了以后排查"识图没反应"时先看 token 预算。
+- 深夜关心：23:00–01:59 窗口、距主人最后消息 2–10 小时、当天未发过、距上次主动消息≥6 小时才触发；文案由模型生成后经程序校验（≤60字，命中"责怪/内疚/等了你/怎么还不回/为什么不/失踪/不理我/一整晚/多久没"一律丢弃），通过后标记当日并计入 `last_proactive`，避免和常规主动私聊撞车。
+- 测试：容器内 88 项全过（新增 `tests/test_care_and_review.py` 6 项：自评入库与上下文可见、失败不影响出图、配额与坏图、关心窗口/冷却、内疚话术被拒、温柔句返回且当日只一次）。
+- 部署：备份 `care-review-20261030-220958`；重启后插件正常加载。
+- 仍需真实 QQ 验收：画一张后看 `drawing_history.review` 是否有内容、她能否据此聊画面；深夜关心是否在合适的日子触发且不烦。

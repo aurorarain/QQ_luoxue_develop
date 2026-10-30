@@ -53,6 +53,11 @@ def _to_jpeg_data_url(raw, max_side=MAX_SIDE):
     return 'data:image/jpeg;base64,' + base64.b64encode(buffer.getvalue()).decode()
 
 
+def to_data_url(raw, max_side=MAX_SIDE):
+    """Public helper for other modules (e.g. reviewing a generated picture)."""
+    return _to_jpeg_data_url(raw, max_side)
+
+
 async def attachment_images(event, limit=MAX_IMAGES):
     """Return (data_urls, report) for at most `limit` images of this exact event."""
     from astrbot.api.message_components import Image

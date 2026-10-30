@@ -447,10 +447,26 @@ Alex很久没来时可以有轻微想念，不公开其隐私，不控诉不制�
             return None
         return text
 
+    async def night_care(self):
+        umo=self.state.get('owner_umo','')
+        if umo!='napcat:FriendMessage:'+OWNER:return
+        try:
+            text=await self.features.night_care()
+        except Exception as exc:
+            logger.info('[luoxue_social] night care skipped: %s',type(exc).__name__);return
+        if not text:return
+        await self.context.send_message(umo,MessageChain([Plain(text)]))
+        self.state['last_proactive']=time.time()
+        self.state['unanswered']=1
+        self.add('private','洛雪（深夜关心）',text)
+        logger.info('[luoxue_social] night care sent')
+
     async def tick(self):
         now = time.time()
         current = dt.datetime.now(TZ)
         await self.companion.daily(current)
+        # Late-night care runs outside the 9-23 window on purpose; it has its own cooldowns.
+        await self.night_care()
         if not 9 <= current.hour < 23:
             return
         await self.features.idle()

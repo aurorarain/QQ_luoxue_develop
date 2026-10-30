@@ -197,12 +197,13 @@ class Features:
         return await automatic_context(self,text)
 
     def drawing_context(self,private):
-        rows=[{k:x.get(k) for k in ('created_at','prompt','model','generated','delivered','plan_source','source')}
+        rows=[{k:x.get(k) for k in ('created_at','prompt','model','generated','delivered','plan_source','review','source')}
               for x in self.s.state.get('drawing_history',[]) if private or x.get('channel')=='group'][-4:]
         return ('\n你有真实的生图插件，能按描述生成并发送想象图，不要说不能画。以下是插件的真实操作记录：'+
                 json.dumps(rows,ensure_ascii=False)+'。generated=true表示确实生成；delivered=true表示发送接口成功。'
                 'plan_source=model表示提示词是你在本轮策划的，fallback表示直接用原话。'
-                '不要否认已完成的绘图。提示词不等于你看过成图像素，没有视觉描述就别编细节，也不能把想象画像说成真实本人。')
+                'review是你自己看过成图后写的一句客观描述（真的读过像素），可以据此聊画面；没有review就说明还没看过这张图，别编细节。'
+                '不要否认已完成的绘图，也不能把想象画像说成真实本人。')
 
     async def deliver_drawing(self,event,image,model,prompt,plan=None):
         path=self.root/('drawing-'+str(time.time_ns())+'.png');path.write_bytes(image)
@@ -217,7 +218,58 @@ class Features:
         await event.send(MessageChain([Image.fromFileSystem(str(path))]))
         record['delivered']=True;self.s.save()
         self.s.add(channel,'洛雪','[真实绘图结果] 已生成并发送一张图片。模型：'+model+'；请求：'+prompt[:300]+'。这是想象创作，不是对真人外貌的确认。')
+        tasks=getattr(self,'tasks',None)
+        if tasks is not None:
+            task=asyncio.create_task(self.review_drawing(record,image))
+            tasks.add(task);task.add_done_callback(tasks.discard)
         return True
+
+    async def review_drawing(self,record,image):
+        """Let her actually look at her own picture once, bounded per day."""
+        usage=self.s.state.setdefault('review_usage',{})
+        today=time.strftime('%Y-%m-%d')
+        if usage.get('day')!=today:usage.clear();usage.update(day=today)
+        usage.setdefault('count',0)
+        if usage['count']>=15:return
+        try:
+            from .vision import to_data_url
+            data_url=await asyncio.to_thread(to_data_url,image,768)
+            if not data_url:return
+            provider=await self.s.context.get_using_provider_async(self.s.state.get('owner_umo'))
+            if not provider:return
+            usage['count']+=1;self.s.save()
+            response=await provider.text_chat(
+                prompt='客观描述这张图的画面主体、构图和色调，30字以内；只输出描述，不评价好坏。',
+                image_urls=[data_url],contexts=[],persist=False)
+            review=re.sub(r'\s+',' ',(response.completion_text or '')).strip()[:80]
+            if review:
+                record['review']=review;self.s.save()
+        except Exception as exc:
+            logger.info('[luoxue_image] self review skipped: %s',type(exc).__name__)
+
+    def night_care_ready(self,now=None):
+        current=now or dt.datetime.now(TZ)
+        if not (current.hour>=23 or current.hour<2):return False
+        if self.s.state.get('night_care_day')==current.date().isoformat():return False
+        last=self.s.state.get('last_owner',0)
+        if not last:return False
+        silence=time.time()-last
+        if not 2*3600<=silence<=10*3600:return False
+        return time.time()-self.s.state.get('last_proactive',0)>=6*3600
+
+    async def night_care(self,now=None):
+        """One short late-night line, never guilt-tripping. Returns None when it should stay quiet."""
+        from .persona import PERSONA
+        if not self.night_care_ready(now):return None
+        try:
+            raw=await self.s.generate('现在已经很晚了，Alex今天没再来消息。用洛雪的口吻写一句很短的关心，10到30字，'
+                                      '不追问行踪、不责怪他不回、不制造内疚、不发问句式的连环追问。只输出这一句。',PERSONA)
+        except Exception:
+            return None
+        text=re.sub(r'\s+',' ',(raw or '')).strip()
+        if not text or len(text)>60 or re.search(r'责怪|内疚|等(?:了)?你|怎么(?:还)?不回|为什么不|失踪|不理我|一整晚|多久没',text):return None
+        self.s.state['night_care_day']=dt.datetime.now(TZ).date().isoformat();self.s.save()
+        return text
 
     def meme_instructions(self,private=True):
         """Compact inventory: counts plus a couple of example meanings, never all 171 rows.
