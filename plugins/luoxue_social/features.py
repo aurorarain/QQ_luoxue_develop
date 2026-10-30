@@ -339,7 +339,7 @@ class Features:
         if self.index_path.exists():self.index=json.loads(self.index_path.read_text())
         image=self.cfg.get('image_api',{});usage=self.s.state.get('image_usage',{})
         today=time.strftime('%Y-%m-%d');drawn=usage.get('group_count',0) if usage.get('day')==today else 0
-        cap=int(image.get('group_daily_limit',10) or 10)
+        cap=int(image.get('group_daily_limit',20) or 20)
         return ('社交功能：在线；私聊仅老大Alex；群内观察、按唤醒回复和低频主动；成员列表/欢迎/@已启用；危险执行工具已关闭。\n'
                 f'表情库：{len(self.index)}张（去重轮换）；主动私聊：{self.s.state.get("proactive_enabled",True)}；'
                 f'自主说说：{self.s.state.get("qzone_enabled",True)}；'+
@@ -365,7 +365,7 @@ class Features:
         usage.setdefault('owner_count',0);usage.setdefault('group_count',0)
         # Owner is unlimited by explicit instruction; everyone else shares one daily pool.
         bucket='owner_count' if is_owner else 'group_count'
-        cap=int(api.get('group_daily_limit',10) or 10)
+        cap=int(api.get('group_daily_limit',20) or 20)
         if bucket=='group_count' and usage[bucket]>=cap:
             await event.send(MessageChain([Plain(f'今天群里已经画满 {cap} 张了，明天再画。')]))
             return True

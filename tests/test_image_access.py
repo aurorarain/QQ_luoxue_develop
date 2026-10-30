@@ -26,10 +26,10 @@ class ImageAccess(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(PermissionError):select_image_request('/精绘26 鲸鱼娘','90001','10001')
         with self.assertRaises(ValueError):select_image_request('/精绘26','10001','10001')
 
-    async def test_group_quota_ten_owner_unlimited_and_planner_used(self):
+    async def test_group_quota_twenty_owner_unlimited_and_planner_used(self):
         f=features.Features.__new__(features.Features);f.owner='10001'
         f.cfg={'image_api':{'provider':'dashscope','api_key':'TEST_CANARY','base_url':'https://dashscope.aliyuncs.com',
-                            'model':'wan2.6-t2i','size':'1280*1280','group_daily_limit':10}}
+                            'model':'wan2.6-t2i','size':'1280*1280','group_daily_limit':20}}
         planned=[]
         async def generate(prompt,system,**kwargs):
             planned.append(prompt)
@@ -39,19 +39,20 @@ class ImageAccess(unittest.IsolatedAsyncioTestCase):
         with tempfile.TemporaryDirectory() as folder:
             f.root=pathlib.Path(folder)
             with patch('luoxue_social.image_api.generate',AsyncMock(return_value=b'fake-image')) as call:
-                for _ in range(10):
+                for _ in range(20):
                     await f.draw_request(Event(sender='90001'),'画一张鲸鱼娘')
-                self.assertEqual(call.await_count,10)
+                self.assertEqual(call.await_count,20)
                 refused=Event(sender='90001')
                 await f.draw_request(refused,'画一张鲸鱼娘')
-                self.assertEqual(call.await_count,10)
+                self.assertEqual(call.await_count,20)
                 self.assertIn('画满',chain_text(refused.sent[0]))
+                self.assertIn('20',chain_text(refused.sent[0]))
                 for _ in range(12):
                     await f.draw_request(Event(sender='10001',private=True),'画一张米饭')
-                self.assertEqual(call.await_count,22)
+                self.assertEqual(call.await_count,32)
         self.assertEqual({c.args[0]['model'] for c in call.call_args_list},{'wan2.6-t2i'})
         self.assertEqual({c.args[0]['size'] for c in call.call_args_list},{'1280*1280'})
-        self.assertEqual(f.s.state['image_usage']['group_count'],10)
+        self.assertEqual(f.s.state['image_usage']['group_count'],20)
         self.assertEqual(f.s.state['image_usage']['owner_count'],12)
         self.assertTrue(all(x['delivered'] for x in f.s.state['drawing_history']))
         self.assertEqual({x['plan_source'] for x in f.s.state['drawing_history']},{'model'})
