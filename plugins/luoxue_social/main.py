@@ -269,8 +269,9 @@ class Social(Star):
             voice = next((m.star_cls for m in self.context.get_all_stars()
                           if m.root_dir_name == 'luoxue_voice'), None)
             if not poke and voice:
-                module = __import__(type(voice).__module__, fromlist=['wants_voice_reply', 'fish_tts'])
-                if module.wants_voice_reply(text):
+                from .voice_control import wants_voice_reply
+                module = __import__(type(voice).__module__, fromlist=['fish_tts'])
+                if wants_voice_reply(text):
                     try:
                         wav = await module.fish_tts(reply)
                         path = self.path.parent / ('group_voice_' + str(time.time_ns()) + '.wav')

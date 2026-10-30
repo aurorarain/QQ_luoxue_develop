@@ -1,0 +1,4 @@
+name: luoxue_voice
+desc: 洛雪语音插件：/说话 让洛雪发语音、/声音 查看状态、语音意图自动识别；唱歌入口保留（需 RVC 服务与曲库）
+author: Alex
+version: 0.2.0

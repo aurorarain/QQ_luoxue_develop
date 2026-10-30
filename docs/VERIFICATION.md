@@ -44,3 +44,13 @@ The deployment record intentionally omits private IDs and endpoint credentials.
 - 测试：容器内 `python -m unittest discover -s tests` 共 50 项全部通过（本地 Windows 同套 50 项通过、2 项因缺 AstrBot 运行时跳过）。新增 `test_vision_and_planning.py` 覆盖附件数量/尺寸/损坏数据、图片确实传入 provider、策划清洗与限长、群聊上下文不含私聊 canary。
 - 已部署备份：`/opt/luoxue/astrbot/data/social_backups/p0-vision-20261030-210441`；重启后插件 2.3.0 正常加载，health 探测全绿（群成员4、表情171、空间读取OK、公开模型OK）。
 - 仍需真实QQ事件验收：群聊发图后洛雪能否据实描述；私聊发图；以及一次真实生图（当日额度已用满，需次日或调额度）。
+
+# 2026-10-30 语音失效修复（意图漏判）
+
+- 现象：Alex 在群里说“用语音喊我句老大”、在私聊说“用语音撒娇撒娇”，洛雪回“语音我这边发不出去，撒娇的话也只能用字凑合一下”，没有语音。
+- 定位：Fish API、Key、音色、代理全部正常。容器内按真实配置直连合成返回 **HTTP 200 / 200748 字节 RIFF WAV**；容器环境 `FISH_AUDIO_API_KEY` 与 Alex 提供的新 Key 一致。真正原因在 `wants_voice_reply()`：旧规则要求“语音类词 + 动作词（说|讲|念|读|发|来|听）”，而“喊”“撒娇”不在动作词里，两句都被判为普通聊天，于是语音分支根本没执行，模型也就照着“没有语音”作答。
+- 修复：把意图判断收敛到 `luoxue_social/voice_control.py` 一份实现（否定式 → 祈使式 → 动词前/后位置 → 词组合），`luoxue_voice` 通过 `data.plugins.luoxue_social.voice_control` 复用（带兜底并记录警告）。群聊分支改为直接调用这份实现。
+- 顺带修的隐患：`natural_say`/`/说话` 既 `event.send` 又 `yield chain_result` 会重复发语音，已拆成 `_write_wav` 与 `_send_voice`；`natural_say` 的提示词还写着“Alex 的 AI 女友”，与已取消的女友设定冲突，已改为“鲸鱼娘 AI 伙伴（不是女友）”；`SONGS_DIR` 由写死的 Windows 路径改为 `LUOXUE_SONGS_DIR` 环境变量（默认 Linux 插件数据目录）；`luoxue_voice` 0.1.0 → 0.2.0 并纳入仓库。
+- 能力说明纠正：群聊与私聊提示词现在都明确“你确实有 Fish 语音能力，识别到语音请求时由插件合成发送，不要说自己发不出语音”，避免模型凭旧印象否认能力。
+- 验证：容器内 53 项测试全过；意图矩阵 11 个正例全中、7 个负例全不误触发；部署后插件 `luoxue_voice 0.2.0` 正常加载、`speak`/`sing` 工具注册成功、health 探测全绿；容器内实调 `fish_tts('老大，我回来啦，语音测试。')` 返回 200748 字节 RIFF WAV。
+- 仍需真实 QQ 客户端验收：发一条语音请求，确认客户端能听、音色与情绪自然（API 成功只证明合成成功）。

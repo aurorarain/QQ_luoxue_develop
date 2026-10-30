@@ -28,6 +28,12 @@
 
 默认继续现有Fish音色和模型，不切换收费档。S2方括号情绪提示由`voice_control.py`添加，剔除表情标签和舞台动作。HTTP成功只能证明合成成功，情绪是否自然还需实际试听。
 
+`luoxue_voice` 现在也纳入本仓库（`plugins/luoxue_voice/`），密钥只从容器环境读取：`FISH_AUDIO_API_KEY`、`FISH_AUDIO_MODEL`（默认 `s2.1-pro-free`）、`FISH_AUDIO_REFERENCE_ID`、`FISH_AUDIO_PROXY`（海外链路必须走 mihomo）。任何密钥都不写进代码或 Git。
+
+**语音意图只有一份实现**：`luoxue_social/voice_control.py` 的 `wants_voice_reply()`，群聊回复路径和 `luoxue_voice` 的自然语言兜底都调用它，避免两处规则漂移。2026-10-30 修过一次真实漏判：旧规则只认“说/讲/念/读”，所以“用语音喊我句老大”“用语音撒娇撒娇”被判为普通聊天，模型于是回“语音发不出去”。现在的规则是：否定式（别用语音/不想听语音）先排除 → 祈使式（用语音…/发个语音/来段语音/说句话）命中 → 动词在前（发语音/你能发语音吗）或动词在后（语音条发我）命中 → 否则才用“语音类词 + 动作词”组合判断。`语音功能坏了吗` 这类纯提及不会触发。
+
+合成后由插件写临时 wav 并作为 `Record` 发送。工具调用（`speak`）走 `event.send`，生成器处理器（`natural_say`/`/说话`）走 `yield event.chain_result`，两者不能同时用，否则会重复发一条语音。
+
 代理订阅节点可能过期。维护脚本`refresh_proxy_candidates.py`可从私有导出的proxies JSON中选出TCP可达候选，生成Fish/海外素材走代理、其余直连的规则；输入包含订阅凭据，权限必须600，不能提交Git。生成后先用Mihomo配置校验，再重启代理，再实测Fish请求。TCP可达和gstatic健康测试都不能代替实际TTS验证。
 
 可选API：MiniMax Speech系列有emotion与语气词控制；阿里云CosyVoice部分模型/音色支持情绪。都需独立凭据和音色试听，不保证能复用Fish参考ID。
