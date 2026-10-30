@@ -63,10 +63,15 @@ class SelfReview(unittest.IsolatedAsyncioTestCase):
 
 class NightCare(unittest.IsolatedAsyncioTestCase):
     NIGHT = dt.datetime(2026, 10, 30, 23, 30, tzinfo=rhythm.TZ)
+    # Move the owner's quiet hours out of the way to test the care window itself.
+    OPEN = {'quiet_start_hour': 3, 'quiet_end_hour': 7}
 
     def test_ready_window_and_cooldowns(self):
-        now = dt.datetime(2026, 10, 30, 23, 30, tzinfo=rhythm.TZ)
+        now = self.NIGHT
         f = build(state={'last_owner': time.time() - 3 * 3600})
+        # Default quiet hours are 23:00-07:00, so care must stay silent then.
+        self.assertFalse(f.night_care_ready(now))
+        f.cfg = dict(self.OPEN)
         self.assertTrue(f.night_care_ready(now))
         self.assertFalse(f.night_care_ready(dt.datetime(2026, 10, 30, 22, 0, tzinfo=rhythm.TZ)))
         self.assertFalse(f.night_care_ready(dt.datetime(2026, 10, 30, 3, 0, tzinfo=rhythm.TZ)))
@@ -78,16 +83,28 @@ class NightCare(unittest.IsolatedAsyncioTestCase):
         f.s.state['last_proactive'] = time.time() - 3600
         self.assertFalse(f.night_care_ready(now))
 
+    def test_quiet_hours_boundaries(self):
+        for hour, expected in ((22, False), (23, True), (0, True), (6, True), (7, False)):
+            now = dt.datetime(2026, 10, 30, hour, 0, tzinfo=rhythm.TZ)
+            self.assertEqual(rhythm.quiet_hours(now), expected, hour)
+
     async def test_guilt_trip_text_is_rejected(self):
         f = build(generate=AsyncMock(return_value='你怎么还不回我，我等了你一整晚。'))
+        f.cfg = dict(self.OPEN)
         f.s.state['last_owner'] = time.time() - 3 * 3600
         self.assertIsNone(await f.night_care(self.NIGHT))
         self.assertNotIn('night_care_day', f.s.state)
 
     async def test_gentle_line_is_returned_and_capped_daily(self):
         f = build(generate=AsyncMock(return_value='眼睛明天会抗议的，早点睡。'))
+        f.cfg = dict(self.OPEN)
         f.s.state['last_owner'] = time.time() - 3 * 3600
         text = await f.night_care(self.NIGHT)
         self.assertEqual(text, '眼睛明天会抗议的，早点睡。')
         self.assertIn('night_care_day', f.s.state)
+        self.assertIsNone(await f.night_care(self.NIGHT))
+
+    async def test_quiet_hours_keep_the_owner_undisturbed(self):
+        f = build(generate=AsyncMock(return_value='早点睡。'))
+        f.s.state['last_owner'] = time.time() - 3 * 3600
         self.assertIsNone(await f.night_care(self.NIGHT))

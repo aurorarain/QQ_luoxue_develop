@@ -93,3 +93,13 @@ The deployment record intentionally omits private IDs and endpoint credentials.
 - 测试：容器内 105 项全过（新增 `tests/test_feeds.py` 6 项：https 过滤与数量上限、缓存不重复抓、源失败容错、标题摘要标注、无阅读不注入、来源混合）。
 - 部署：备份 `feeds-20261030-221709`；重启后无异常。
 - **知识库结论**：AstrBot 内置 `knowledge_base/kb.db` 存在但为空，且知识库检索依赖 embedding provider；当前 provider 列表只有 `deepseek`（chat）与两个 TTS，没有 embedding 模型，所以知识库暂时不可用。要么配一个 embedding（本地 bge-m3 在 4GB 无 GPU 上偏重，或云 embedding 增加成本），要么继续用 RSS + memory 插件。**本轮选择 RSS，不启用知识库。**
+
+# 2026-10-30 静音时段 + 群消息重复记录修复
+
+- 静音时段：23:00–07:00 不向主人发任何主动私聊（回复不受影响），群聊不受限。实现为 `rhythm.quiet_hours()` + 私有 settings 的 `quiet_start_hour/quiet_end_hour`；`tick()` 在群主动之后、私聊主动之前加一道判断；深夜关心因为在静音窗口内，默认处于休眠（把静音时段改掉即可恢复）。
+- 群消息重复记录（真实 bug）：同一条群消息会被写两次——`PassiveObserver` 写 `group_observed`，唤醒处理写 `group`，而 `group_memory()` 把两个频道合并，模型就看到同一句话两遍。Alex 截图里"你连着夸两遍"就是这么来的（`events.db` 里"画的不错"确实有两行，`channel` 分别是 `group_observed` 和 `group`）。
+  - 修法：`add()` 跨两个群频道做 15 秒内的同发送者同文本去重；`group_memory()` 用 `dedupe()` 把 120 秒内的重复行合并，SQL 命中的结果也一并去重。
+  - 验证：写两次后 `group_observed` 只有 1 行、`group` 0 行，`group_memory()` 返回 1 条；真的隔了 10 分钟重复说同一句仍然保留两条。
+- 顺带如实：`drawing_context` 增加"review 只代表你看过一次，不要说看了两遍/反复研究"。实测最近一张图的自评是"戴眼罩的动漫少女居中，背景为天台建筑，呈紫灰暖黄色调。"，说明自评链路确实跑通了，但"看了两遍"是演绎。
+- 测试：容器内 112 项全过（新增 `tests/test_dedupe.py` 5 项、`test_care_and_review.py` 增加静音边界与休眠断言）。
+- 部署：备份 `quiet-dedupe-20261030-223024`；运行时验证静音边界、去重条数、23:30 不再触发关心。

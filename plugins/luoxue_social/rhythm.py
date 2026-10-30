@@ -29,3 +29,13 @@ def context(now=None):
     current = phase(now)
     return ('\n你的时间状态：北京时间%d点，%s——%s。这是角色状态，不是真实生理，'
             '不要说自己熬夜、没睡、生病或正在做什么线下的事。' % (current['hour'], current['phase'], current['hint']))
+
+
+def quiet_hours(now=None, start=23, end=7):
+    """True inside the owner's do-not-disturb window (private proactive only)."""
+    hour = (now or dt.datetime.now(TZ)).hour
+    if start == end:
+        return False
+    if start < end:
+        return start <= hour < end
+    return hour >= start or hour < end

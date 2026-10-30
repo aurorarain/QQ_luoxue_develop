@@ -209,6 +209,7 @@ class Features:
                 json.dumps(rows,ensure_ascii=False)+'。generated=true表示确实生成；delivered=true表示发送接口成功。'
                 'plan_source=model表示提示词是你在本轮策划的，fallback表示直接用原话。'
                 'review是你自己看过成图后写的一句客观描述（真的读过像素），可以据此聊画面；没有review就说明还没看过这张图，别编细节。'
+                'review只代表你看过一次，不要说看了两遍、反复研究或放大对比。'
                 '不要否认已完成的绘图，也不能把想象画像说成真实本人。')
 
     async def deliver_drawing(self,event,image,model,prompt,plan=None):
@@ -255,6 +256,9 @@ class Features:
 
     def night_care_ready(self,now=None):
         current=now or dt.datetime.now(TZ)
+        # Alex asked for no proactive private messages 23:00-07:00; that window covers
+        # this feature's original hours, so it stays dormant until quiet hours change.
+        if rhythm.quiet_hours(current,self.cfg.get('quiet_start_hour',23),self.cfg.get('quiet_end_hour',7)):return False
         if not (current.hour>=23 or current.hour<2):return False
         if self.s.state.get('night_care_day')==current.date().isoformat():return False
         last=self.s.state.get('last_owner',0)

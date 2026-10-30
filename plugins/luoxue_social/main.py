@@ -29,6 +29,13 @@ BOT = str(SETTINGS.get('bot_qq', os.getenv('LUOXUE_BOT_QQ', '')))
 TZ = ZoneInfo('Asia/Shanghai')
 INSTANCE = None
 PUBLIC = PUBLIC_PERSONA
+QUIET_START = int(SETTINGS.get('quiet_start_hour', 23))
+QUIET_END = int(SETTINGS.get('quiet_end_hour', 7))
+
+
+def in_quiet_hours(now=None):
+    """Owner do-not-disturb window: private proactive messages stop, replies still work."""
+    return rhythm.quiet_hours(now, QUIET_START, QUIET_END)
 
 
 def group_wake(event):
@@ -202,8 +209,19 @@ class Social(Star):
         tmp.replace(self.path)
 
     def add(self, channel, sender, text):
+        """Record a message once. One QQ group message reaches us twice: the passive
+        observer writes group_observed and the wake handler writes group, so without this
+        guard the model reads the same sentence twice and thinks it was said twice."""
+        text = text[:700]
+        stamp = int(time.time())
+        channels = ('group','group_observed') if channel in ('group','group_observed') else (channel,)
+        for name in channels:
+            for row in (self.state.get(name) or [])[-4:]:
+                if (str(row.get('sender'))==str(sender) and row.get('text')==text
+                    and abs(stamp-int(row.get('time',0)))<=15):
+                    return
         rows = self.state.setdefault(channel, [])
-        rows.append({'time': int(time.time()), 'sender': str(sender), 'text': text[:700]})
+        rows.append({'time': stamp, 'sender': str(sender), 'text': text})
         self.state[channel] = rows[-120:]
         if hasattr(self, 'db_path'):
             with contextlib.closing(sqlite3.connect(self.db_path)) as db:
@@ -211,8 +229,19 @@ class Social(Star):
                 db.commit()
         self.save()
 
+    @staticmethod
+    def dedupe(rows, window=120):
+        """Collapse the same speaker saying the same thing within a couple of minutes."""
+        result=[]
+        for row in rows:
+            duplicate=any(row.get('sender')==kept.get('sender') and row.get('text')==kept.get('text')
+                          and abs(int(row.get('time',0))-int(kept.get('time',0)))<=window
+                          for kept in result[-12:])
+            if not duplicate:result.append(row)
+        return result
+
     def group_memory(self, query):
-        recent = (self.state.get('group_observed', [])[-14:] + self.state.get('group', [])[-14:])
+        recent = self.dedupe(self.state.get('group_observed', [])[-14:] + self.state.get('group', [])[-14:])
         if not hasattr(self, 'db_path'):
             return recent
         keywords = re.findall(r'[\u4e00-\u9fff]{2,6}|[a-zA-Z]{3,15}', query or '')[-8:]
@@ -223,7 +252,8 @@ class Social(Star):
         with contextlib.closing(sqlite3.connect(self.db_path)) as db:
             rows = db.execute('SELECT ts,sender,text FROM events WHERE channel IN ("group","group_observed") AND (' + condition + ') ORDER BY id DESC LIMIT 12',
                               ['%' + k + '%' for k in keywords]).fetchall()
-        return [{'time':t,'sender':s,'text':x} for t,s,x in reversed(rows)] + recent
+        hits = [{'time':t,'sender':s,'text':x} for t,s,x in reversed(rows)]
+        return self.dedupe(hits + recent)
 
     async def generate(self, prompt, system, umo=None, image_urls=None):
         provider = await self.context.get_using_provider_async(umo or self.state.get('owner_umo'))
@@ -468,7 +498,7 @@ Alex很久没来时可以有轻微想念，不公开其隐私，不控诉不制�
         try: await feeds.read_feeds(self.features, current.timestamp())
         except Exception as exc: logger.info('[luoxue_social] reading skipped: %s',type(exc).__name__)
         await self.companion.daily(current)
-        # Late-night care runs outside the 9-23 window on purpose; it has its own cooldowns.
+        # Late-night care is dormant inside the owner's quiet hours (23:00-07:00).
         await self.night_care()
         if not 9 <= current.hour < 23:
             return
@@ -476,6 +506,9 @@ Alex很久没来时可以有轻微想念，不公开其隐私，不控诉不制�
         await self.features.qzone_interactions()
         try:await self.features.proactive_group(current)
         except Exception as exc:logger.info('[luoxue_social] public proactive deferred: %s',type(exc).__name__)
+        if in_quiet_hours(current):
+            # Group messages may still go out; only the owner stays undisturbed.
+            return
         umo = self.state.get('owner_umo', '')
         if umo != 'napcat:FriendMessage:' + OWNER:
             return
