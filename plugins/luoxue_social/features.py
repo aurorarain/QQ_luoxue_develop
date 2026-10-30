@@ -220,15 +220,34 @@ class Features:
         return True
 
     def meme_instructions(self,private=True):
-        inventory=[{'id':x['sha'][:12],'meaning':Path(x['file']).stem,'category':x['category']}
-                   for x in self.index if x.get('pack')=='blue-fat-fish' and (private or x['scope']=='public')]
+        """Compact inventory: counts plus a couple of example meanings, never all 171 rows.
+
+        The old version dumped every filename into every prompt (about 10KB), which both
+        cost tokens and drowned the semantic mapping it was supposed to support.
+        """
+        allowed=[x for x in self.index if private or x['scope']=='public']
+        per={}
+        for row in allowed:
+            per.setdefault(row['category'],[]).append(Path(row['file']).stem)
+        if not per:
+            return '\n你现在没有可用的表情素材，只用文字回复，不要说发了表情。'
+        summary='；'.join('%s %d张（如%s）'%(category,len(names),'、'.join(names[:2]))
+                         for category,names in sorted(per.items(),key=lambda kv:-len(kv[1])))
+        last=self.last_meme(private)
+        tail=('\n你上一次刚发过［%s］表情（%s），这一轮别连着发同类，也别声称发过别的图。'
+              % (last['category'],last['meaning'])) if last else ''
         return ('\n你确实能通过插件发送本地图片/GIF表情包，不要说自己发不了表情包。'
                 '日常以文字为主，不使用颜文字、喵或单独口癖行；本条优先于旧人设中的概率要求。'
-                '只有语义明显合适、图片比文字更传神时，在末尾写一个[表情:分类]。'
-                '轻松聊天大约三四条回复配一张就好，严肃求助、技术解释不用表情。分类语义对照：'+MEME_GUIDE+
-                '。优先按下列文件含义对照选择准确的一张，格式[表情:分类:图片id]，不能仅因同分类就随便选。'
-                '文件名含义是索引标签，不代表你看过图片内容。不合适就不选，发送由插件冷却控制，不能在正文承诺已经发出。'
-                +json.dumps(inventory,ensure_ascii=False))
+                '只有语义明显合适、图片比文字更传神时，在末尾写一个[表情:分类]；'
+                '想指定具体一张就写[表情:分类:图片id]，只能从下面给出的含义里挑，不能仅因同分类就随便选。'
+                '轻松聊天大约两三条回复配一张，强情绪（大笑、被逗、哼、委屈）可以更积极；严肃求助、技术解释不用表情。'
+                '分类语义：'+MEME_GUIDE+'。你不会看到图片像素，文件名含义只是索引标签；不合适就不选，'
+                '发送由插件冷却控制，不能在正文承诺已经发出。可用素材：'+summary+tail)
+
+    def last_meme(self,private):
+        channel='private' if private else 'group'
+        row=(self.s.state.get('meme_last') or {}).get(channel) or {}
+        return row if row.get('meaning') else None
 
     def observe_images(self,event):
         if str(event.get_sender_id())!=self.owner:return
@@ -344,11 +363,17 @@ class Features:
         state=getattr(getattr(self,'s',None),'state',{})
         throttle=state.setdefault('meme_throttle',{}).setdefault(session,{'turns':0,'last':0})
         throttle['turns']+=1
-        if category and throttle['turns']>=2 and time.time()-throttle['last']>=45:
+        # Trigger v2: a clearly emotional line may carry a sticker sooner than a calm one.
+        strong=bool(re.search(r'哈哈|嘿嘿|哼|才不|呜|好耶|讨厌|笨蛋|哎呀|欸|哇|委屈|抱',text))
+        need_turns=1 if strong else 2
+        need_gap=25 if strong else 45
+        if category and throttle['turns']>=need_turns and time.time()-throttle['last']>=need_gap:
             path=self.choose_meme(category,private,session,asset_id) if asset_id else self.choose_meme(category,private,session)
-            if path:
+            if path and hasattr(self,'s'):
                 chain.append(Image.fromFileSystem(str(path)))
                 throttle.update(turns=0,last=time.time())
+                state.setdefault('meme_last',{})['private' if private else 'group']={
+                    'category':category,'meaning':Path(path).stem,'time':time.time()}
         if hasattr(self,'s'):self.s.save()
         return chain
 
