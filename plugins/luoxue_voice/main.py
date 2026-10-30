@@ -4,8 +4,9 @@
 密钥与音色只从容器环境读取，不写进代码。语音意图判断复用
 luoxue_social.voice_control，保证群聊与私聊用同一套规则。
 """
-import asyncio
+import json
 import os
+import pathlib
 import re
 import tempfile
 import time
@@ -101,11 +102,30 @@ async def _send_voice(event, wav: bytes, prefix: str):
     return path
 
 
+def _owner_ids() -> set:
+    """Owner comes from the private settings file, never from a literal in this repository."""
+    ids = set()
+    path = pathlib.Path(os.getenv("LUOXUE_SETTINGS", "/AstrBot/data/config/luoxue_social_settings.json"))
+    try:
+        data = json.loads(path.read_text())
+        if data.get("owner_qq"):
+            ids.add(str(data["owner_qq"]))
+    except Exception:
+        logger.warning("[luoxue_voice] owner settings unreadable; private voice filter stays empty")
+    env = os.getenv("LUOXUE_OWNER_QQ", "").strip()
+    if env:
+        ids.add(env)
+    return ids
+
+
+OWNER_IDS = _owner_ids()
+
+
 class VoiceIntentFilter(filter.CustomFilter):
     def filter(self, event, cfg):
         return (
             event.is_private_chat()
-            and str(event.get_sender_id()) == os.getenv("LUOXUE_OWNER_QQ", "")
+            and str(event.get_sender_id()) in OWNER_IDS
             and wants_voice_reply(event.get_message_str())
         )
 
