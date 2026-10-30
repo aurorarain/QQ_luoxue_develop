@@ -4,11 +4,12 @@
   "bot_qq": "YOUR_BOT_QQ",
   "web_proxy": null,
   "image_api": {
-    "base_url": "https://YOUR_IMAGE_PROVIDER/v1",
+    "provider": "dashscope",
+    "base_url": "https://dashscope.aliyuncs.com",
     "api_key": "",
-    "model": "",
-    "daily_limit": 3,
-    "size": "1024x1024",
+    "model": "wan2.6-t2i",
+    "size": "1280*1280",
+    "group_daily_limit": 10,
     "proxy": null
   }
 }

@@ -1,4 +1,5 @@
 import asyncio
+import contextlib
 import importlib
 import json
 import pathlib
@@ -86,10 +87,11 @@ class Boundaries(unittest.IsolatedAsyncioTestCase):
         social.state={'private':[{'text':'SECRET_CANARY'}],'group':[{'text':'PUBLIC_ONLY'}]}
         with tempfile.TemporaryDirectory() as folder:
             social.db_path=pathlib.Path(folder)/'events.db'
-            with sqlite3.connect(social.db_path) as db:
+            with contextlib.closing(sqlite3.connect(social.db_path)) as db:
                 db.execute('CREATE TABLE events(id INTEGER PRIMARY KEY, channel TEXT,ts REAL,sender TEXT,text TEXT)')
                 db.execute('INSERT INTO events(channel,ts,sender,text) VALUES(?,?,?,?)',('private',0,'owner','SECRET_CANARY topic'))
                 db.execute('INSERT INTO events(channel,ts,sender,text) VALUES(?,?,?,?)',('group',0,'public','topic public memory'))
+                db.commit()
             text=json.dumps(social.group_memory('topic'))
             self.assertNotIn('SECRET_CANARY',text)
             self.assertIn('public memory',text)

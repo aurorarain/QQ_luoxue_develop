@@ -37,9 +37,19 @@
 - https://platform.minimaxi.com/docs/api-reference/speech-t2a-http
 - https://help.aliyun.com/zh/model-studio/action-emotion-control-practice
 
+## 图文识别
+
+群聊和私聊都把**本轮事件自带的图片**（最多2张、长边压到1280、转JPEG）作为 `image_urls` 送入主模型。只读当前消息组件，不扫描历史、私密目录或别的会话，所以群聊取图不可能触到主人私聊素材。附件不可用时静默跳过并记日志，提示词里也不会暗示模型看过没送到的图。
+
+主 provider（`deepseek-flash`）已用真实API请求实测支持图片输入：纯红测试图被正确回答为“红色”，`prompt_tokens` 从34升到226说明图像token确实计入。这属于**API层验证**，真实QQ事件里的图片中转格式仍需发一张图做客户端验收。
+
+绘图参考图也走同一条通道：群友说“画成这个样子”时，附件会一并交给策划模型。
+
 ## 图像与表情
 
-不依赖ComfyUI。填写私有配置image_api的base_url、api_key、model后才实际启用，默认每天最多3次API尝试。现有DeepSeek聊天key不能用于OpenAI Images API。未配置时明确提示。
+不依赖ComfyUI。填写私有配置image_api的base_url、api_key、model后才实际启用。2026-10-30起统一使用万相2.6（1280×1280）：`/精绘26` 仍只对真实主人开放，但普通请求也是同一模型，聊天里写“用2.6”不构成授权。额度按发起人区分——**群友合计每日10张**（`group_daily_limit`），**主人不限量**；同一实例同一时刻只允许一个绘图请求在跑，避免并发连发。现有DeepSeek聊天key不能用于OpenAI Images API。
+
+绘图前先策划再出图：`draw_planner` 用群聊/私聊各自的安全上下文（群聊只用公开群记录，私聊才用主人对话尾巴）让模型输出结构化方案（主体/场景/构图/镜头/光照/色彩/风格/负面），程序负责清洗QQ号、链接、密钥痕迹、`[at:]`标记并限长（2.6为2000字、2.0系为800字），失败时回退到清洗后的原话。负面约束只记录不进正向提示词，避免反向召唤。`drawing_history` 现在保存 `prompt`、`plan_source`（model/fallback）、`used_search`、`used_images`、`generated`、`delivered`，仍然区分“生成成功”和“发送成功”。
 
 表情库：`data/plugin_data/luoxue_social/表情包/{分类}/`，包括`index.json`和`README.md`。开始可使用12张Twemoji种子素材（CC-BY-4.0，逐项记录来源）。这只是起步素材，后续可手动加入真正的图片/GIF表情。
 

@@ -16,7 +16,9 @@ from astrbot.api import logger
 from astrbot.api.event import filter
 from astrbot.api.message_components import At, Image, Plain
 from astrbot.core.message.message_event_result import MessageChain
+from .draw_planner import plan as plan_drawing
 from .output_guard import guard_output
+from .vision import attachment_images
 
 CATEGORIES = ['开心','傲娇','生气','委屈','惊讶','无语','晚安','喜欢','害羞','吃饭','金钱','问候','工作','娱乐','回应']
 
@@ -134,17 +136,21 @@ class Features:
         return await automatic_context(self,text)
 
     def drawing_context(self,private):
-        rows=[{k:x.get(k) for k in ('created_at','prompt','model','generated','delivered','source')}
+        rows=[{k:x.get(k) for k in ('created_at','prompt','model','generated','delivered','plan_source','source')}
               for x in self.s.state.get('drawing_history',[]) if private or x.get('channel')=='group'][-4:]
         return ('\n你有真实的生图插件，能按描述生成并发送想象图，不要说不能画。以下是插件的真实操作记录：'+
                 json.dumps(rows,ensure_ascii=False)+'。generated=true表示确实生成；delivered=true表示发送接口成功。'
+                'plan_source=model表示提示词是你在本轮策划的，fallback表示直接用原话。'
                 '不要否认已完成的绘图。提示词不等于你看过成图像素，没有视觉描述就别编细节，也不能把想象画像说成真实本人。')
 
-    async def deliver_drawing(self,event,image,model,prompt):
+    async def deliver_drawing(self,event,image,model,prompt,plan=None):
         path=self.root/('drawing-'+str(time.time_ns())+'.png');path.write_bytes(image)
         channel='private' if event.is_private_chat() else 'group'
+        plan=plan or {}
         record={'created_at':time.time(),'prompt':prompt[:500],'model':model,'generated':True,
-                'delivered':False,'channel':channel,'file':path.name,'source':'image provider response'}
+                'delivered':False,'channel':channel,'file':path.name,'source':'image provider response',
+                'plan_source':plan.get('plan_source','unknown'),'plan':plan.get('plan') or {},
+                'used_search':bool(plan.get('used_search')),'used_images':int(plan.get('used_images') or 0)}
         self.s.state['drawing_history']=(self.s.state.get('drawing_history',[])+[record])[-40:]
         self.s.save()
         await event.send(MessageChain([Image.fromFileSystem(str(path))]))
@@ -331,39 +337,57 @@ class Features:
 
     def status(self):
         if self.index_path.exists():self.index=json.loads(self.index_path.read_text())
-        image=self.cfg.get('image_api',{})
+        image=self.cfg.get('image_api',{});usage=self.s.state.get('image_usage',{})
+        today=time.strftime('%Y-%m-%d');drawn=usage.get('group_count',0) if usage.get('day')==today else 0
+        cap=int(image.get('group_daily_limit',10) or 10)
         return ('社交功能：在线；私聊仅老大Alex；群内观察、按唤醒回复和低频主动；成员列表/欢迎/@已启用；危险执行工具已关闭。\n'
                 f'表情库：{len(self.index)}张（去重轮换）；主动私聊：{self.s.state.get("proactive_enabled",True)}；'
-                f'自主说说：{self.s.state.get("qzone_enabled",True)}；绘图API：'+('已配置' if image.get('api_key') else '待配置独立密钥')+
-                '；自主活动：公开资讯；抖音发布：未授权。')
+                f'自主说说：{self.s.state.get("qzone_enabled",True)}；'+
+                ('绘图：'+(image.get('model') or 'wan2.6-t2i')+' '+(image.get('size') or '1280*1280')+
+                 f'，群每日{cap}张（今日{drawn}），老大不限量；本轮图文可识群聊附带图片；'
+                 if image.get('api_key') else '绘图API：待配置独立密钥；')+
+                '自主活动：公开资讯；抖音发布：未授权。')
 
     async def draw_request(self,event,text):
         from .image_policy import premium_request,select_image_request
         if not premium_request(text) and not re.search(r'画(?:一张|个|张|图)|生成.{0,4}(?:图|图片)|draw\s',text,re.I):return False
-        try:model,size,prompt=select_image_request(text,event.get_sender_id(),self.owner)
+        private=bool(event.is_private_chat());is_owner=str(event.get_sender_id())==self.owner
+        api=dict(self.cfg.get('image_api',{}))
+        try:model,size,_=select_image_request(text,event.get_sender_id(),self.owner,api)
         except (PermissionError,ValueError) as exc:
             await event.send(MessageChain([Plain(str(exc))]));return True
-        api={**self.cfg.get('image_api',{}),'model':model,'size':size}
-        if not api.get('api_key') or not api.get('base_url') or not api.get('model'):
+        api.update(model=model,size=size)
+        if not api.get('api_key') or not api.get('base_url'):
             await event.send(MessageChain([Plain('绘图插件已接好，但还缺一个支持生图的API配置。现在的DeepSeek对话密钥不能拿来生图。')]))
             return True
         day=time.strftime('%Y-%m-%d');usage=self.s.state.setdefault('image_usage',{})
-        if usage.get('day')!=day:usage.update(day=day,count=0)
-        if usage.get('count',0)>=int(api.get('daily_limit',3)):
-            await event.send(MessageChain([Plain('今天的绘图额度用完啦。')]))
+        if usage.get('day')!=day:usage.clear();usage.update(day=day)
+        usage.setdefault('owner_count',0);usage.setdefault('group_count',0)
+        # Owner is unlimited by explicit instruction; everyone else shares one daily pool.
+        bucket='owner_count' if is_owner else 'group_count'
+        cap=int(api.get('group_daily_limit',10) or 10)
+        if bucket=='group_count' and usage[bucket]>=cap:
+            await event.send(MessageChain([Plain(f'今天群里已经画满 {cap} 张了，明天再画。')]))
             return True
-        usage['count']=usage.get('count',0)+1;self.s.save()
-        if api.get('provider')=='dashscope':
-            from .image_api import generate
-            image=await generate(api,prompt)
-            return await self.deliver_drawing(event,image,model,prompt)
-        url=api['base_url'].rstrip('/')+'/images/generations'
-        data=json.loads(await fetch(url,proxy=api.get('proxy'),limit=20_000_000,
-             headers={'Authorization':'Bearer '+api['api_key']},
-             json_body={'model':api['model'],'prompt':text[:1500],'n':1,'size':api.get('size','1024x1024')}))
-        item=data['data'][0]
-        image=base64.b64decode(item['b64_json'],validate=True) if item.get('b64_json') else await fetch(item['url'],limit=15_000_000)
-        return await self.deliver_drawing(event,image,model,prompt)
+        # One drawing per plugin instance at a time: a burst cannot open parallel paid requests.
+        lock=getattr(self,'_draw_lock',None)
+        if lock is None:lock=asyncio.Lock();self._draw_lock=lock
+        async with lock:
+            usage[bucket]+=1;self.s.save()
+            images,_report=await attachment_images(event)
+            plan=await plan_drawing(self.s,self,text,private,images,model)
+            prompt=plan['prompt']
+            if api.get('provider')=='dashscope':
+                from .image_api import generate
+                image=await generate(api,prompt)
+            else:
+                url=api['base_url'].rstrip('/')+'/images/generations'
+                data=json.loads(await fetch(url,proxy=api.get('proxy'),limit=20_000_000,
+                     headers={'Authorization':'Bearer '+api['api_key']},
+                     json_body={'model':api['model'],'prompt':prompt[:1500],'n':1,'size':api.get('size','1280x1280')}))
+                item=data['data'][0]
+                image=base64.b64decode(item['b64_json'],validate=True) if item.get('b64_json') else await fetch(item['url'],limit=15_000_000)
+            return await self.deliver_drawing(event,image,model,prompt,plan)
 
     async def idle(self):
         now=time.time()
