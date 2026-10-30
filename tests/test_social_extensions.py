@@ -111,3 +111,21 @@ class Extensions(unittest.IsolatedAsyncioTestCase):
         self.assertIn('唯一老大',persona.PERSONA)
         self.assertIn('不是女友',persona.PERSONA)
         self.assertIn('白米饭',persona.PERSONA)
+
+    def test_banter_rules_stay_playful_not_bureaucratic(self):
+        # 2026-10-30: she answered "我不就是alex吗" with "号对得上，验过了" and treated a
+        # joke as a transaction ("那单交易我不认"). Guard the replacement rules.
+        for phrase in ['先接住对方的梗','别把玩笑当正事办','不要求对方解释','公事公办腔','第一反应要短']:
+            self.assertIn(phrase,persona.PERSONA)
+        self.assertIn('玩笑',persona.PUBLIC_PERSONA)
+
+    def test_group_instructions_treat_banter_as_banter(self):
+        f=features.Features.__new__(features.Features)
+        f.s=types.SimpleNamespace(state={},save=lambda:None)
+        f.cfg={};f.owner='10001';f.index=[];f.index_path=pathlib.Path('/not-used')
+        f.capabilities=lambda:{'features':{},'plugins':[],'plugin_root':'/not-used'}
+        text=f.public_instructions('90001')
+        self.assertIn('默认对方在逗你',text)
+        self.assertIn('验过了',text)  # named as something not to say
+        private=f.private_instructions()
+        self.assertIn('别把它当成需要你表态认不认的事',private)
