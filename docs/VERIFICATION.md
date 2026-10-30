@@ -83,3 +83,13 @@ The deployment record intentionally omits private IDs and endpoint credentials.
 - 修过一次重复：只有一个时段时会出现"夜里…；此刻夜里…"，改为"其它时段 + 此刻当前时段"，并加断言 `text.count('此刻') == 1`。
 - 测试：容器内 95 项全过（新增 `tests/test_life.py` 6 项：时段映射、每时段一次、角色演绎与真实材料区分、跨日重置、同日稳定跨日变化、当前时段不重复）。
 - 部署：备份 `life-20261030-221213`；重启后运行时验证 `advance()` 返回"夜里/把今天的小事在心里过了一遍"，注入文本无重复。
+
+# 2026-10-30 批次4：RSS 阅读源 + 知识库结论
+
+- 新增 `feeds.py`：白名单三个公开源（少数派 / Solidot / V2EX），每天最多抓一次（12 小时间隔，缓存），每个源最多取 2 条、总计 3 条，只保留标题、链接、摘要，链接必须是 https；抓取失败的源静默跳过。读过的东西写进 `state['reading']`，并挑一条并入 `discoveries`，来源标注"公开RSS，只读了标题和摘要"。
+- 注入 `clock_context`（群聊/私聊/群兜底共用），文案明确"只读过标题摘要，不能声称看完全文或视频"。
+- 真实抓取验证（服务器直连，非模拟）：3 条，来源混合 `['Solidot','少数派']`，例如"本周看什么 | 最近值得一看的 9 部作品""LibreOffice 项目递交的代码发现使用LLM 的明确标记"。
+- 第一版曾出现"一个源把 3 条全占满"，已加 `PER_FEED=2` 并新增测试断言来源必须是混合的。
+- 测试：容器内 105 项全过（新增 `tests/test_feeds.py` 6 项：https 过滤与数量上限、缓存不重复抓、源失败容错、标题摘要标注、无阅读不注入、来源混合）。
+- 部署：备份 `feeds-20261030-221709`；重启后无异常。
+- **知识库结论**：AstrBot 内置 `knowledge_base/kb.db` 存在但为空，且知识库检索依赖 embedding provider；当前 provider 列表只有 `deepseek`（chat）与两个 TTS，没有 embedding 模型，所以知识库暂时不可用。要么配一个 embedding（本地 bge-m3 在 4GB 无 GPU 上偏重，或云 embedding 增加成本），要么继续用 RSS + memory 插件。**本轮选择 RSS，不启用知识库。**

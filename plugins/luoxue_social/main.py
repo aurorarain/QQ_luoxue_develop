@@ -13,7 +13,7 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 from .persona import PERSONA, PUBLIC_PERSONA
 from .vision import attachment_images, attachment_note
-from . import life, rhythm
+from . import feeds, life, rhythm
 
 from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, filter
@@ -159,7 +159,7 @@ class Social(Star):
         now=time.time();previous=self.state.get('previous_clock_'+channel,0)
         elapsed=max(0,int(now-previous)) if previous else None
         return '\n可信时间：'+json.dumps({'Beijing_time':dt.datetime.now(TZ).isoformat(timespec='seconds'),
-            'seconds_since_previous_received_message':elapsed,'scope':channel},ensure_ascii=False)+'。间隔是收到消息的实际时间差，不推测缺失时间；不能把分钟说成小时。'+rhythm.context()+life.context(self)
+            'seconds_since_previous_received_message':elapsed,'scope':channel},ensure_ascii=False)+'。间隔是收到消息的实际时间差，不推测缺失时间；不能把分钟说成小时。'+rhythm.context()+life.context(self)+feeds.context(getattr(self,'features',None))
 
     @filter.custom_filter(PassiveObserver, priority=200)
     async def observe_only(self, event):
@@ -465,6 +465,8 @@ Alex很久没来时可以有轻微想念，不公开其隐私，不控诉不制�
         now = time.time()
         current = dt.datetime.now(TZ)
         life.advance(self,current)
+        try: await feeds.read_feeds(self.features, current.timestamp())
+        except Exception as exc: logger.info('[luoxue_social] reading skipped: %s',type(exc).__name__)
         await self.companion.daily(current)
         # Late-night care runs outside the 9-23 window on purpose; it has its own cooldowns.
         await self.night_care()
