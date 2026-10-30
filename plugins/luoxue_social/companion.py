@@ -5,6 +5,12 @@ import re
 import time
 from .persona import PERSONA
 
+SENTIMENT = (
+    ('warm', re.compile(r'谢谢|喜欢你|好可爱|抱抱|乖|厉害|真棒|最好了|可爱')),
+    ('tease', re.compile(r'笨蛋|不服|你输了|斗嘴|嫌弃|哼|傻鱼')),
+    ('low', re.compile(r'累|难受|烦|伤心|不舒服|压力|焦虑|失眠')),
+)
+
 
 class Companion:
     def __init__(self,social):
@@ -25,6 +31,28 @@ class Companion:
         self.s.state['companion_mood']={'label':label,'time':time.time() if label!=previous.get('label') else previous.get('time',time.time())}
         self.s.save()
         return '\n私聊角色心境余温：'+label+'。只是角色表达状态，不是真实生理感受；轻微影响语气，不能盖过本轮情绪和正事，不反复宣告心情。'
+
+    def atmosphere(self,text,now=None):
+        """Short-horizon conversational atmosphere (about 30 minutes).
+
+        This is deliberately NOT a second emotion engine: the relationship plugin keeps
+        owning 好感/信任/熟悉度, so here we only carry the last exchange's mood.
+        """
+        now=now or time.time()
+        record=self.s.state.get('atmosphere') or {}
+        kind=record.get('kind') if now-record.get('time',0)<=1800 else None
+        for name,pattern in SENTIMENT:
+            if pattern.search(text or ''):
+                kind=name
+                break
+        if kind:
+            self.s.state['atmosphere']={'kind':kind,'time':now}
+            self.s.save()
+        hints={'warm':'他刚才被你哄得挺开心，保持一点小得意就好，别反复邀功',
+               'tease':'你们刚斗完嘴，气氛还没散，可以再损一句，但别升级成真生气',
+               'low':'他刚说了累或难受，先收住玩笑，认真接住'}
+        hint=hints.get(kind)
+        return ('\n对话气氛余温：'+hint+'。只影响语气，不是新的情绪系统，也不改写长期关系数值。') if hint else ''
 
     def diary_context(self):
         rows=self.s.state.get('companion_diary',[])[-3:]

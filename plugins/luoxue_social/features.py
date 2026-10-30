@@ -1,6 +1,7 @@
 """Bounded social actions. No shell, arbitrary paths or configuration mutation tools."""
 import asyncio
 import base64
+import datetime as dt
 import hashlib
 import ipaddress
 import json
@@ -10,15 +11,43 @@ import socket
 import time
 from pathlib import Path
 from urllib.parse import urlparse
+from zoneinfo import ZoneInfo
 
 import aiohttp
 from astrbot.api import logger
 from astrbot.api.event import filter
 from astrbot.api.message_components import At, Image, Plain
 from astrbot.core.message.message_event_result import MessageChain
+from . import rhythm
 from .draw_planner import plan as plan_drawing
 from .output_guard import guard_output
 from .vision import attachment_images
+
+TZ = ZoneInfo('Asia/Shanghai')
+SPLIT_MIN = 28
+SPLIT_MAX = 3
+
+
+def split_reply(text, limit=SPLIT_MAX):
+    """Split a longer reply into a few chat bubbles, like a person typing.
+
+    Short answers, code blocks and bullet lists stay in one message: splitting those
+    reads worse than a single block.
+    """
+    text = (text or '').strip()
+    if not text:
+        return []
+    if len(text) <= SPLIT_MIN or '```' in text or re.search(r'(?m)^\s*(?:[-*+]|\d+\.)\s', text):
+        return [text]
+    parts = [part.strip() for part in re.split(r'(?<=[。！？!?…~～])', text)]
+    parts = [part for part in parts if part]
+    if len(parts) < 2:
+        return [text]
+    while len(parts) > limit:
+        shortest = min(range(len(parts) - 1), key=lambda index: len(parts[index]))
+        parts[shortest] = parts[shortest] + parts[shortest + 1]
+        parts.pop(shortest + 1)
+    return [part for part in parts if part] or [text]
 
 CATEGORIES = ['开心','傲娇','生气','委屈','惊讶','无语','晚安','喜欢','害羞','吃饭','金钱','问候','工作','娱乐','回应']
 
@@ -122,7 +151,7 @@ class Features:
                 self.meme_instructions(False)+
                 self.drawing_context(False)+
                 '\n你有真实语音能力（Fish AD学姐音色），识别到“用语音/发语音/喊我一句”这类请求时由插件合成并发送语音；不要说自己发不出语音，也不要承诺一定成功。'+
-                '\n当前真实能力摘要：'+json.dumps(self.capabilities()['features'],ensure_ascii=False))
+                '\n你的真实运行状态（按当前时刻计算，不是固定宣传语）：'+json.dumps(self.self_status(),ensure_ascii=False))
 
     def private_instructions(self):
         discoveries=json.dumps(self.s.state.get('discoveries',[])[-4:],ensure_ascii=False)
@@ -131,9 +160,36 @@ class Features:
                 self.meme_instructions()+
                 self.drawing_context(True)+
                 '\n你有真实语音能力（Fish AD学姐音色）：想让他听见时由插件合成语音发送。不要说“语音发不出去”，也不要假装发过。'+
+                '\n深夜道晚安、被夸、被撒娇逗到时，可以主动调用speak发一条语音（一天最多三次，别滥用；说完就把这件事放开）。'+
                 '\n跟Alex聊天可以损他、抬杠、装傻、顺杆爬；被调侃时别把它当成需要你表态认不认的事，也别要求他解释为什么。'+
+                '\n你的真实运行状态（按当前时刻计算）：'+json.dumps(self.self_status(),ensure_ascii=False)+
                 '\n你当前可只读了解的插件与能力（未配置不代表可用，不能执行任意文件操作）：'+json.dumps(self.capabilities(),ensure_ascii=False)+
                 '\n实际获取过的新鲜内容（标题/摘要级信息，不代表完整看过视频）：'+discoveries)
+
+    def self_status(self):
+        """Runtime facts, not a hardcoded brochure: she answers '你会什么' from actual state."""
+        today=time.strftime('%Y-%m-%d')
+        image=self.cfg.get('image_api',{}) or {}
+        usage=self.s.state.get('image_usage',{}) or {}
+        drawn=usage.get('group_count',0) if usage.get('day')==today else 0
+        cap=int(image.get('group_daily_limit',20) or 20)
+        web=self.s.state.get('web_usage',{}) or {}
+        searched=web.get('count',0) if web.get('day')==today else 0
+        voice=False
+        try:
+            meta=next((m for m in self.s.context.get_all_stars() if m.root_dir_name=='luoxue_voice'),None)
+            voice=bool(meta and getattr(meta,'activated',False))
+        except Exception:
+            voice=False
+        return {'voice':'可用（Fish AD学姐音色）' if voice else '未加载',
+                'vision':'能看本轮随消息附带的图片（最多2张）',
+                'drawing':f'{image.get("model") or "wan2.6-t2i"}；群友今天 {drawn}/{cap} 张，老大不限量',
+                'memory':'和老大私聊有长期记忆/画像/日记；群里只记公开聊天，不读私聊',
+                'search':f'联网搜索可用，今天 {searched}/40 次',
+                'stickers':f'{len(self.index)} 张本地表情',
+                'qzone':'能发说说、点赞、评论（接口成功不等于客户端可见）',
+                'singing':'还不能唱歌（缺曲库和RVC）',
+                'limits':'没有Shell、任意文件、配置或插件安装权限'}
 
     async def web_context(self,text):
         from .web_search import automatic_context
@@ -296,12 +352,35 @@ class Features:
         return chain
 
     async def send_reply(self,event,text):
-        chain=self.reply_chain(text,event.is_private_chat(),event.unified_msg_origin)
-        if (not event.is_private_chat() and not any(isinstance(c,At) for c in chain)
-            and re.search(r'(?:@|艾特|at)我',event.get_message_str() or '',re.I)
-            and str(event.get_sender_id()) in {x['qq'] for x in self.roster_cache}):
-            chain.insert(0,At(qq=str(event.get_sender_id())))
-        await event.send(MessageChain(chain))
+        private=event.is_private_chat();session=event.unified_msg_origin
+        chunks=split_reply(guard_output(text))
+        for index,chunk in enumerate(chunks):
+            chain=self.reply_chain(chunk,private,session)
+            if index<len(chunks)-1:
+                # Only the final bubble may carry an @ or an image.
+                chain=[c for c in chain if isinstance(c,Plain)] or [Plain(chunk)]
+            if (index==0 and not private and not any(isinstance(c,At) for c in chain)
+                and re.search(r'(?:@|艾特|at)我',event.get_message_str() or '',re.I)
+                and str(event.get_sender_id()) in {x['qq'] for x in self.roster_cache}):
+                chain.insert(0,At(qq=str(event.get_sender_id())))
+            if index:
+                await asyncio.sleep(random.uniform(.8,1.8))
+            await event.send(MessageChain(chain))
+
+    def proactive_voice_allowed(self,text):
+        """Occasionally answer out loud. Bounded per day; never for long or technical replies."""
+        if len(text or '')>62 or re.search(r'```|https?://',text or ''):
+            return False
+        day=time.strftime('%Y-%m-%d');usage=self.s.state.setdefault('proactive_voice',{})
+        if usage.get('day')!=day:usage.clear();usage.update(day=day,count=0)
+        if usage.get('count',0)>=3:return False
+        hour=dt.datetime.now(TZ).hour
+        weight=.10
+        if hour>=22 or hour<1:weight=.30 if re.search(r'晚安|睡|好梦',text or '') else .12
+        if re.search(r'抱|喜欢|哼|笨|才不|谁要',text or ''):weight+=.08
+        if random.random()>min(weight,.4):return False
+        usage['count']=usage.get('count',0)+1;self.s.save()
+        return True
 
     async def read_bilibili(self):
         now=time.time();cache=self.s.state.get('bili_cache',{})
@@ -337,7 +416,22 @@ class Features:
         text=''.join(x.text for x in result.chain if isinstance(x,Plain))
         if not text or text.startswith('社交功能：'):return
         nontext=[x for x in result.chain if not isinstance(x,Plain)]
-        result.chain=self.reply_chain(text,event.is_private_chat(),event.unified_msg_origin)+nontext
+        private=event.is_private_chat();session=event.unified_msg_origin
+        chunks=split_reply(guard_output(text))
+        result.chain=self.reply_chain(chunks[0],private,session)+nontext
+        if len(chunks)>1:
+            # The pipeline sends result.chain itself; extra bubbles are delayed so they
+            # arrive after the first one instead of racing it.
+            task=asyncio.create_task(self._deliver_tail(event,chunks[1:],private,session))
+            self.tasks.add(task);task.add_done_callback(self.tasks.discard)
+
+    async def _deliver_tail(self,event,chunks,private,session):
+        try:
+            for chunk in chunks:
+                await asyncio.sleep(random.uniform(.9,1.9))
+                await event.send(MessageChain(self.reply_chain(chunk,private,session)))
+        except Exception as exc:
+            logger.info('[luoxue_social] tail bubbles skipped: %s',type(exc).__name__)
 
     def status(self):
         if self.index_path.exists():self.index=json.loads(self.index_path.read_text())
