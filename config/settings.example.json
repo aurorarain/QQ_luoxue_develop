@@ -3,6 +3,8 @@
   "group_qq": "YOUR_GROUP_QQ",
   "bot_qq": "YOUR_BOT_QQ",
   "web_proxy": null,
+  "quiet_start_hour": 23,
+  "quiet_end_hour": 7,
   "image_api": {
     "provider": "dashscope",
     "base_url": "https://dashscope.aliyuncs.com",
