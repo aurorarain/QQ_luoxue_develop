@@ -4,6 +4,6 @@
   "api_key": "",
   "model": "wan2.6-t2i",
   "size": "1280*1280",
-  "daily_limit": 3,
+  "group_daily_limit": 10,
   "proxy": null
 }

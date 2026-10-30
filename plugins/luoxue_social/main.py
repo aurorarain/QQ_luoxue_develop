@@ -12,6 +12,7 @@ import time
 from pathlib import Path
 from zoneinfo import ZoneInfo
 from .persona import PERSONA, PUBLIC_PERSONA
+from .vision import attachment_images, attachment_note
 
 from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, filter
@@ -104,7 +105,7 @@ class Social(Star):
             db.execute('CREATE INDEX IF NOT EXISTS event_channel ON events(channel,id)')
         if not self.state.get('private'):
             try:
-                with sqlite3.connect('file:/AstrBot/data/data_v4.db?mode=ro', uri=True) as db:
+                with contextlib.closing(sqlite3.connect('file:/AstrBot/data/data_v4.db?mode=ro', uri=True)) as db:
                     row = db.execute('SELECT content,updated_at FROM conversations WHERE user_id=? ORDER BY updated_at DESC LIMIT 1',
                                      ('napcat:FriendMessage:' + OWNER,)).fetchone()
                 if row:
@@ -203,8 +204,9 @@ class Social(Star):
         rows.append({'time': int(time.time()), 'sender': str(sender), 'text': text[:700]})
         self.state[channel] = rows[-120:]
         if hasattr(self, 'db_path'):
-            with sqlite3.connect(self.db_path) as db:
+            with contextlib.closing(sqlite3.connect(self.db_path)) as db:
                 db.execute('INSERT INTO events(channel,ts,sender,text) VALUES(?,?,?,?)', (channel,time.time(),str(sender),text[:2000]))
+                db.commit()
         self.save()
 
     def group_memory(self, query):
@@ -216,16 +218,18 @@ class Social(Star):
             return recent
         # The SQL scope is fixed to public-group records; callers cannot request private records.
         condition = ' OR '.join('text LIKE ?' for _ in keywords)
-        with sqlite3.connect(self.db_path) as db:
+        with contextlib.closing(sqlite3.connect(self.db_path)) as db:
             rows = db.execute('SELECT ts,sender,text FROM events WHERE channel IN ("group","group_observed") AND (' + condition + ') ORDER BY id DESC LIMIT 12',
                               ['%' + k + '%' for k in keywords]).fetchall()
         return [{'time':t,'sender':s,'text':x} for t,s,x in reversed(rows)] + recent
 
-    async def generate(self, prompt, system, umo=None):
+    async def generate(self, prompt, system, umo=None, image_urls=None):
         provider = await self.context.get_using_provider_async(umo or self.state.get('owner_umo'))
         if not provider:
             raise RuntimeError('no provider')
-        response = await provider.text_chat(prompt=prompt, system_prompt=system, contexts=[], persist=False)
+        attachments = {'image_urls': image_urls} if image_urls else {}
+        response = await provider.text_chat(prompt=prompt, system_prompt=system, contexts=[],
+                                            persist=False, **attachments)
         return (response.completion_text or '').strip()
 
     @filter.custom_filter(PublicInteraction, priority=100)
@@ -243,7 +247,11 @@ class Social(Star):
                 return
             self.pokes[key] = time.time()
         text = '（戳了洛雪一下，请自然回应，别泄露私聊）' if poke else event.get_message_str()
-        self.add('group', sender, text)
+        # Only this event's attachments. A group call can never reach private media.
+        images, vision = await attachment_images(event)
+        if vision['skipped']:
+            logger.info('[luoxue_vision] group attachments skipped: %s', vision['skipped'])
+        self.add('group', sender, (text or '') + (f' [附{len(images)}张图]' if images else ''))
         try:
             if await self.features.bilibili_request(event,text):
                 return
@@ -253,7 +261,8 @@ class Social(Star):
             memory = json.dumps(self.group_memory(text), ensure_ascii=False)
             reply = await self.generate(f'公开群记录（包含被动观察，不代表每句话都需要回复）：{memory}\n主人QQ：{OWNER}\n群成员：{roster}\n当前发言者QQ：{sender}\n当前消息：{text}',
                 PUBLIC + self.features.public_instructions(sender)+self.clock_context('group')+
-                await self.features.web_context(text), event.unified_msg_origin)
+                await self.features.web_context(text)+attachment_note(len(images)), event.unified_msg_origin,
+                image_urls=images or None)
             if not reply:
                 return
             self.add('group', '洛雪', reply)
@@ -298,6 +307,7 @@ class Social(Star):
         req.system_prompt += self.features.private_instructions()
         req.system_prompt += self.companion.mood(text)+self.companion.diary_context()
         req.system_prompt += self.clock_context('private')+await self.features.web_context(text)
+        req.system_prompt += attachment_note(len(getattr(req,'image_urls',None) or []),True)
 
     @filter.on_llm_request(priority=-10000)
     async def tool_safety(self, event, req):
@@ -307,6 +317,7 @@ class Social(Star):
             req.system_prompt=PUBLIC+self.features.public_instructions(str(event.get_sender_id()))
             req.system_prompt+='\n仅公开群记录：'+json.dumps(self.group_memory(event.get_message_str()),ensure_ascii=False)
             req.system_prompt+=self.clock_context('group')+await self.features.web_context(event.get_message_str() or '')
+            req.system_prompt+=attachment_note(len(getattr(req,'image_urls',None) or []),False)
             req.contexts=[]
             if not req.prompt:
                 req.prompt='群友@了你，没有附带文字。自然简短回应一句。'
