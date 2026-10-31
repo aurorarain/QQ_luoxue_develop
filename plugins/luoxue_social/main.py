@@ -73,10 +73,10 @@ class MemberNotice(filter.CustomFilter):
 
 class PrivateDrawing(filter.CustomFilter):
     def filter(self,event,cfg):
-        from .image_policy import premium_request
+        from .image_policy import is_draw_request,premium_request
         text=event.get_message_str() or ''
         return ((event.is_private_chat() and str(event.get_sender_id())==OWNER and
-                (premium_request(text) or bool(re.search(r'画(?:一张|个|张|图)|生成.{0,4}(?:图|图片)|draw\s',text,re.I)))) or
+                (premium_request(text) or is_draw_request(text))) or
                 (not event.is_private_chat() and str(event.get_group_id())==GROUP and premium_request(text)))
 
 
