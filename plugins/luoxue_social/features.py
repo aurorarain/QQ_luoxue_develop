@@ -1,6 +1,7 @@
 """Bounded social actions. No shell, arbitrary paths or configuration mutation tools."""
 import asyncio
 import base64
+import contextlib
 import datetime as dt
 import hashlib
 import ipaddress
@@ -26,6 +27,10 @@ from .vision import attachment_images
 TZ = ZoneInfo('Asia/Shanghai')
 SPLIT_MIN = 28
 SPLIT_MAX = 3
+
+
+class DrawCancelled(Exception):
+    """Raised when the owner interrupts a drawing that is already generating."""
 
 
 def split_reply(text, limit=SPLIT_MAX):
@@ -105,6 +110,9 @@ class Features:
         self.index_path=self.library/'index.json'
         self.index=json.loads(self.index_path.read_text()) if self.index_path.exists() else []
         self.roster_cache=[];self.roster_at=0;self.tasks=set()
+        self.draw_cancel=asyncio.Event()   # "停" sets this while a picture is being generated
+        self.draw_requester=''
+        self.draw_active=False
         self.jobs=self.root/'jobs';self.jobs.mkdir(exist_ok=True)
         self._save_index()
 
@@ -568,28 +576,56 @@ class Features:
         if lock is None:lock=asyncio.Lock();self._draw_lock=lock
         async with lock:
             usage[bucket]+=1;self.s.save()
-            # Generation takes tens of seconds; acknowledge first so nobody thinks she froze.
-            await event.send(MessageChain([Plain(random.choice(
-                ['收到，我先理一下画面，画好就发。','好，这就画，大概半分钟。','在画了，等我一会儿。']))]))
-            images,_report=await attachment_images(event)
+            self.draw_cancel=asyncio.Event()
+            self.draw_requester=str(event.get_sender_id())
+            self.draw_active=True
             try:
-                plan=await plan_drawing(self.s,self,text,private,images,model)
-                prompt=plan['prompt']
-                if api.get('provider')=='dashscope':
-                    from .image_api import generate
-                    image=await generate(api,prompt)
-                else:
-                    url=api['base_url'].rstrip('/')+'/images/generations'
-                    data=json.loads(await fetch(url,proxy=api.get('proxy'),limit=20_000_000,
-                         headers={'Authorization':'Bearer '+api['api_key']},
-                         json_body={'model':api['model'],'prompt':prompt[:1500],'n':1,'size':api.get('size','1280x1280')}))
-                    item=data['data'][0]
-                    image=base64.b64decode(item['b64_json'],validate=True) if item.get('b64_json') else await fetch(item['url'],limit=15_000_000)
-            except Exception as exc:
-                logger.warning('[luoxue_image] generation failed: %s',type(exc).__name__)
-                await event.send(MessageChain([Plain('这次没画出来——接口超时或报错了。等一会儿再让我试一次，别连发，我怕又撞上排队。')]))
-                return True
-            return await self.deliver_drawing(event,image,model,prompt,plan)
+                # Generation takes tens of seconds; acknowledge first so nobody thinks she froze.
+                await event.send(MessageChain([Plain(random.choice(
+                    ['收到，我先理一下画面，画好就发。','好，这就画，大概半分钟。','在画了，等我一会儿。']))]))
+                images,_report=await attachment_images(event)
+                try:
+                    plan=await plan_drawing(self.s,self,text,private,images,model)
+                    prompt=plan['prompt']
+                    image=await self._generate_with_cancel(api,prompt)
+                except DrawCancelled:
+                    await event.send(MessageChain([Plain('好，停了，这张不画了。')]))
+                    return True
+                except Exception as exc:
+                    logger.warning('[luoxue_image] generation failed: %s',type(exc).__name__)
+                    await event.send(MessageChain([Plain('这次没画出来——接口超时或报错了。等一会儿再让我试一次，别连发，我怕又撞上排队。')]))
+                    return True
+                return await self.deliver_drawing(event,image,model,prompt,plan)
+            finally:
+                self.draw_active=False
+
+    def cancel_drawing(self):
+        """Called by the stop handler; the in-flight generation aborts on its next check."""
+        self.draw_cancel.set()
+
+    async def _generate_with_cancel(self,api,prompt):
+        """Race the provider call against the cancel event so 停 really stops it."""
+        async def build():
+            if api.get('provider')=='dashscope':
+                from .image_api import generate
+                return await generate(api,prompt)
+            url=api['base_url'].rstrip('/')+'/images/generations'
+            data=json.loads(await fetch(url,proxy=api.get('proxy'),limit=20_000_000,
+                 headers={'Authorization':'Bearer '+api['api_key']},
+                 json_body={'model':api['model'],'prompt':prompt[:1500],'n':1,'size':api.get('size','1280x1280')}))
+            item=data['data'][0]
+            return base64.b64decode(item['b64_json'],validate=True) if item.get('b64_json') else await fetch(item['url'],limit=15_000_000)
+
+        work=asyncio.create_task(build())
+        stop=asyncio.create_task(self.draw_cancel.wait())
+        done,_pending=await asyncio.wait({work,stop},return_when=asyncio.FIRST_COMPLETED)
+        if stop in done and work not in done:
+            work.cancel()
+            with contextlib.suppress(BaseException):
+                await work
+            raise DrawCancelled()
+        stop.cancel()
+        return work.result()
 
     async def idle(self):
         now=time.time()

@@ -24,8 +24,19 @@ DRAW_OBJECT = re.compile(r'(?:想要|想看|看看|要|求|来|做|生成|出|�
 DRAW_ENGLISH = re.compile(r'\b(?:draw|illustrate|imagine)\b', re.I)
 # 短祈使句："画沧月""画只猫""画洛丽塔"（"画画/画风/画质"这类不算）
 DRAW_SHORT = re.compile(r'^[画繪绘]\s*[\u4e00-\u9fffA-Za-z0-9]{1,10}$')
-DRAW_SHORT_NEGATIVE = re.compile(r'^画(?:\S)?(?:画|风|家|质|笔|饼|面|作|师|廊|法|板|纸)$|画画|画风|画质|画师|画法|画笔|画纸')
+# "画的不错/画得挺好/画完了/画过"是在评价，不是让人画——这是真实误判过的案例。
+DRAW_COMMENT = re.compile(r'^[画繪绘]\s*(?:的|得|完|过|了|工|技|风|面|质|法|板|纸|师)|画(?:的|得)(?:不错|挺好|好看|很棒|好棒|真好|可以|不错)|画的像|画得像')
+DRAW_SHORT_NEGATIVE = re.compile(r'画画|画风|画质|画师|画法|画笔|画纸|画板|画工|画技|画面')
 DRAW_NEGATIVE = re.compile(r'动画|漫画|画风|画廊|画家|笔画|计划|规划|策划|刻画|画质|画饼|截图|视频')
+
+# "停"类指令：要真正中断正在进行的绘图。必须整句就是停（避免"停一下车"被误判）。
+STOP_COMMAND = re.compile(
+    r'^(?:(?:停|停下|停一下|先停|打住|算了)[\s。！!~…]*$'
+    r'|(?:别画了?|不用画了?|不要画了?|取消(?:画|绘图)|停下别画)[\s。！!~…]*$)')
+
+
+def is_stop_command(text):
+    return bool(STOP_COMMAND.match(str(text or '').strip()))
 
 
 def is_draw_request(text):
@@ -35,6 +46,8 @@ def is_draw_request(text):
         return False
     if DRAW_QUANTIFIER.search(value) or DRAW_IMPERATIVE.search(value) or DRAW_ENGLISH.search(value):
         return True
+    if DRAW_COMMENT.search(value):
+        return False
     if DRAW_SHORT.match(value) and not DRAW_SHORT_NEGATIVE.search(value):
         return True
     if DRAW_NEGATIVE.search(value):

@@ -144,3 +144,16 @@ The deployment record intentionally omits private IDs and endpoint credentials.
 - 验证：容器 137 项全过（新增：短祈使正负例、先回应后出图、失败有提示且不写历史、戳一戳过滤器与回复）；运行时 `画沧月 True / 画只猫 True / 画画 False / 画风不错 False`。
 - 部署：备份 `draw-ack-20261031-091308`。
 - 运维提醒：**部署重启期间到达的 QQ 消息会丢失**，测试时不要连续部署；重启一次约 30 秒。
+
+# 2026-10-31 修"画的不错"误判 + "停"真正中断
+
+- 误判 1（表扬被当成请求）：`DRAW_SHORT`（`^画 + 1~10 字`）把"画的不错"当成绘图请求，直接开画、消耗额度。实测截图复现：`@洛雪 画的不错` → 她回"在画了，等我一会儿。"并开始出图。
+  修法：新增 `DRAW_COMMENT`，凡以"画"开头且后接"的/得/完/过/了/工/技/风/面/质/法/板/纸/师"的一律判为评价，不触发；并把 画工/画技/画风/画质/画师/画法/画笔/画纸/画板/画面 加入短祈使排除表。
+  运行时验证：`画的不错 False / 画得不错 False / 画沧月 True / 画只猫 True`。
+- 误判 2（"停"没用）：`@洛雪 停` 只得到一句文字回复，图照样画完发出来——因为生成是一个不可中断的 await。
+  修法：`Features.draw_cancel`（asyncio.Event）+ `draw_requester` + `draw_active`；`_generate_with_cancel()` 用 `asyncio.wait({work, stop}, FIRST_COMPLETED)` 竞争，取消时 `work.cancel()` 并抛 `DrawCancelled`，由 `draw_request` 回"好，停了，这张不画了。"，**不写 drawing_history、不发 note、不发图**。
+  - 私聊：`StopDrawing` 过滤器（仅主人私聊）→ `stop_drawing`。
+  - 群聊：`public_chat` 开头内联判断（只有主人或本次绘图发起人能停），避免与过滤器重复回复。
+  - `STOP_COMMAND` 必须整句匹配（`停/停下/停一下/先停/打住/算了/别画了/不用画了/取消画`），所以"停一下车""别画蛇添足"不会误判。
+- 测试：容器 143 项全过（新增 `tests/test_draw_stop.py`：表扬类 11 个负例、真实短祈使 5 个正例、停类正负例、停止时中断且不写历史、未停时正常交付、私聊停止设置标志）。
+- 部署：备份 `draw-stop-20261031-092314`。
