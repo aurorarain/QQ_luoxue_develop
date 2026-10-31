@@ -114,7 +114,71 @@ class Features:
         self.draw_requester=''
         self.draw_active=False
         self.jobs=self.root/'jobs';self.jobs.mkdir(exist_ok=True)
+        self._last_out={}          # 每个会话最后一次发消息的时间，用来控制回复间隔
+        self.reply_gap=True        # 真实实例启用；测试里用 __new__ 构造的实例默认不等待
         self._save_index()
+
+    async def send_gap(self,session,media=False):
+        """文字回复至少间隔 5 秒，语音/图片至少间隔 10 秒（同一会话内）。"""
+        if not getattr(self,'reply_gap',False):return
+        if not hasattr(self,'_last_out'):self._last_out={}
+        key='reply_gap_media_seconds' if media else 'reply_gap_text_seconds'
+        gap=float(self.cfg.get(key,10 if media else 5) or (10 if media else 5))
+        last=float(self._last_out.get(session,0))
+        wait=gap-(time.time()-last)
+        if wait>0:
+            await asyncio.sleep(wait)
+        self._last_out[session]=time.time()
+
+    def mark_sent(self,session):
+        if not hasattr(self,'_last_out'):self._last_out={}
+        self._last_out[session]=time.time()
+
+    def requested_mentions(self,text):
+        """用户明确要求"@/点名/叫他们出来"时，把消息里出现的群成员昵称解析成 QQ。"""
+        value=str(text or '')
+        body=re.sub(r'^\s*(?:@\S{1,16}|[@＠]\S{1,16}|洛雪|肥鱼)[\s，,：:]*','',value)
+        if not re.search(r'@|艾特|点名',body):return []
+        if not re.search(r'叫|喊|出来|冒泡|点名|@|艾特',body):return []
+        roster=[row for row in self.roster_cache if str(row.get('name') or '').strip()]
+
+        def hit(name):
+            if name in value:
+                return True
+            # 简称：像"昔"这样只写了名字头一个字，且紧跟在 @ 或并列词后面。
+            first=name[0] if name else ''
+            if len(name)>=2 and first:
+                return bool(re.search(r'(?:@|和|、|,|，|跟|叫|喊|点)\s*'+re.escape(first),value))
+            return False
+
+        found=[]
+        for row in roster:
+            name=str(row['name'])
+            if hit(name) and (name,row['qq']) not in found:
+                found.append((name,row['qq']))
+        return found[:3]
+
+    def ensure_requested_mentions(self,event,chain):
+        """模型仍然只写名字时，程序把名字换成真正的 @，保证点得到人。"""
+        wanted=self.requested_mentions(event.get_message_str() or '')
+        if not wanted or any(isinstance(item,At) for item in chain):
+            return chain
+        mentions=[]
+        for name,qq in wanted:
+            for item in chain:
+                if not isinstance(item,Plain):continue
+                match=re.search(re.escape(name),item.text)
+                if not match and name:
+                    # 她可能只写了名字头一个字（"昔"代表"昔泠"）。
+                    match=re.search(re.escape(name[0])+r'(?=[、，,。！!？?\s]|$)',item.text)
+                if match:
+                    item.text=item.text[:match.start()]+item.text[match.end():]
+                    mentions.append(At(qq=qq))
+                    break
+        if not mentions:
+            return chain
+        body=[item for item in chain if not (isinstance(item,Plain) and not item.text.strip())]
+        return mentions+body
 
     def _save_index(self):
         tmp=self.index_path.with_suffix('.tmp');tmp.write_text(json.dumps(self.index,ensure_ascii=False,indent=2));tmp.replace(self.index_path)
@@ -280,10 +344,15 @@ class Features:
         self.s.state['drawing_history']=(self.s.state.get('drawing_history',[])+[record])[-40:]
         self.s.save()
         note=guard_output(str(plan.get('note') or '')).strip()
+        session=getattr(event,'unified_msg_origin','')
         if note and len(note)<=44:
             # Say how she read an ambiguous request, then send the picture itself.
+            await self.send_gap(session,media=False)
             await event.send(MessageChain([Plain(note)]))
+            self.mark_sent(session)
+        await self.send_gap(session,media=True)
         await event.send(MessageChain([Image.fromFileSystem(str(path))]))
+        self.mark_sent(session)
         record['delivered']=True;self.s.save()
         self.s.add(channel,'洛雪','[真实绘图结果] 已生成并发送一张图片。模型：'+model+'；请求：'+prompt[:300]+'。这是想象创作，不是对真人外貌的确认。')
         tasks=getattr(self,'tasks',None)
@@ -511,6 +580,7 @@ class Features:
 
     async def send_reply(self,event,text):
         private=event.is_private_chat();session=event.unified_msg_origin
+        await self.send_gap(session,media=False)
         chunks=split_reply(guard_output(text))
         reply_id=getattr(getattr(event,'message_obj',None),'message_id','') or ''
         for index,chunk in enumerate(chunks):
@@ -522,12 +592,15 @@ class Features:
                 and re.search(r'(?:@|艾特|at)我',event.get_message_str() or '',re.I)
                 and str(event.get_sender_id()) in {x['qq'] for x in self.roster_cache}):
                 chain.insert(0,At(qq=str(event.get_sender_id())))
+            if index==0 and not private:
+                chain=self.ensure_requested_mentions(event,chain)
             if index==0 and reply_id and self.should_quote(event):
                 # 群里多人同时在问时，用 QQ 引用标明这句在回谁。
                 chain.insert(0,Reply(id=reply_id))
             if index:
                 await asyncio.sleep(random.uniform(.8,1.8))
             await event.send(MessageChain(chain))
+            self.mark_sent(session)
 
     def proactive_voice_allowed(self,text):
         """Occasionally answer out loud. Bounded per day; never for long or technical replies."""
@@ -577,6 +650,7 @@ class Features:
         if not result or not result.chain:return
         text=''.join(x.text for x in result.chain if isinstance(x,Plain))
         if not text or text.startswith('社交功能：'):return
+        await self.send_gap(event.unified_msg_origin,media=False)
         nontext=[x for x in result.chain if not isinstance(x,Plain)]
         private=event.is_private_chat();session=event.unified_msg_origin
         chunks=split_reply(guard_output(text))
