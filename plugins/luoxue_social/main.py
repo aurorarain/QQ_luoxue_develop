@@ -93,6 +93,16 @@ class StopDrawing(filter.CustomFilter):
         return is_stop_command(event.get_message_str() or '')
 
 
+class MediaTurn(filter.CustomFilter):
+    """文字后紧跟一张图/大表情（同一人、约一秒内）时合成一轮，其余消息仍逐条处理。"""
+
+    def filter(self,event,cfg):
+        raw=event.message_obj.raw_message or {}
+        if raw.get('post_type')!='message':return False
+        if event.is_private_chat():return str(event.get_sender_id())==OWNER
+        return str(event.get_group_id())==GROUP
+
+
 class PrivateDrawing(filter.CustomFilter):
     def filter(self,event,cfg):
         from .image_policy import is_draw_request,premium_request
@@ -152,6 +162,9 @@ class Social(Star):
                 logger.warning('[luoxue_social] owner context seed skipped: %s', type(exc).__name__)
         self.lock = asyncio.Lock()
         self.pokes = {}
+        # 文字后紧跟图片/表情时合并成一整轮；纯文字之间仍然逐条回复。
+        self.text_media_wait = float(SETTINGS.get('text_media_wait_seconds', 1.0))
+        self._pending_media = {}
         self.task = None
         self.probed = False
         from .features import Features
@@ -198,6 +211,48 @@ class Social(Star):
     async def welcome(self, event):
         event.stop_event()
         await self.features.welcome(event)
+
+    @filter.custom_filter(MediaTurn, priority=300)
+    async def turn_gate(self,event):
+        """一段文字后紧跟图片/大表情（同一人、约一秒内）→ 合成一轮再回复。
+
+        纯文字与纯文字之间不合并：每条都照常单独回复。
+        """
+        from .image_policy import is_stop_command
+        components=list(event.get_messages() or [])
+        images=[item for item in components if type(item).__name__=='Image']
+        text=(event.get_message_str() or '').strip()
+        if text.startswith('/') or is_stop_command(text):
+            return
+        key=('private' if event.is_private_chat() else str(event.get_group_id()),str(event.get_sender_id()))
+        if images and text:
+            self.features.note_sticker_combo(event,text)
+            return
+        if images and not text:
+            pending=self._pending_media.get(key)
+            if pending and time.time()<pending['until']:
+                pending['images'].extend(images)
+                event.stop_event()
+                self.features.note_sticker_combo(event,pending['text'])
+                logger.info('[luoxue_social] merged a picture into the pending text turn')
+            return
+        if not text:
+            return
+        slot={'event':event,'until':time.time()+self.text_media_wait,'images':[],'text':text}
+        self._pending_media[key]=slot
+        try:
+            await asyncio.sleep(self.text_media_wait)
+        finally:
+            if self._pending_media.get(key) is slot:
+                self._pending_media.pop(key,None)
+        if slot['images']:
+            for component in slot['images']:
+                try:
+                    event.message_obj.message.append(component)
+                except Exception:
+                    pass
+            event.message_str=text+'（同时发来一张图片或表情）'
+            logger.info('[luoxue_social] text turn merged with %d picture(s)',len(slot['images']))
 
     @filter.custom_filter(StopDrawing, priority=130)
     async def stop_drawing(self,event):

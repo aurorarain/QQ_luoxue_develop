@@ -5,6 +5,7 @@
   "web_proxy": null,
   "quiet_start_hour": 23,
   "quiet_end_hour": 7,
+  "text_media_wait_seconds": 1.0,
   "image_api": {
     "provider": "dashscope",
     "base_url": "https://dashscope.aliyuncs.com",
