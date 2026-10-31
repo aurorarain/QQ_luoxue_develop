@@ -568,19 +568,27 @@ class Features:
         if lock is None:lock=asyncio.Lock();self._draw_lock=lock
         async with lock:
             usage[bucket]+=1;self.s.save()
+            # Generation takes tens of seconds; acknowledge first so nobody thinks she froze.
+            await event.send(MessageChain([Plain(random.choice(
+                ['收到，我先理一下画面，画好就发。','好，这就画，大概半分钟。','在画了，等我一会儿。']))]))
             images,_report=await attachment_images(event)
-            plan=await plan_drawing(self.s,self,text,private,images,model)
-            prompt=plan['prompt']
-            if api.get('provider')=='dashscope':
-                from .image_api import generate
-                image=await generate(api,prompt)
-            else:
-                url=api['base_url'].rstrip('/')+'/images/generations'
-                data=json.loads(await fetch(url,proxy=api.get('proxy'),limit=20_000_000,
-                     headers={'Authorization':'Bearer '+api['api_key']},
-                     json_body={'model':api['model'],'prompt':prompt[:1500],'n':1,'size':api.get('size','1280x1280')}))
-                item=data['data'][0]
-                image=base64.b64decode(item['b64_json'],validate=True) if item.get('b64_json') else await fetch(item['url'],limit=15_000_000)
+            try:
+                plan=await plan_drawing(self.s,self,text,private,images,model)
+                prompt=plan['prompt']
+                if api.get('provider')=='dashscope':
+                    from .image_api import generate
+                    image=await generate(api,prompt)
+                else:
+                    url=api['base_url'].rstrip('/')+'/images/generations'
+                    data=json.loads(await fetch(url,proxy=api.get('proxy'),limit=20_000_000,
+                         headers={'Authorization':'Bearer '+api['api_key']},
+                         json_body={'model':api['model'],'prompt':prompt[:1500],'n':1,'size':api.get('size','1280x1280')}))
+                    item=data['data'][0]
+                    image=base64.b64decode(item['b64_json'],validate=True) if item.get('b64_json') else await fetch(item['url'],limit=15_000_000)
+            except Exception as exc:
+                logger.warning('[luoxue_image] generation failed: %s',type(exc).__name__)
+                await event.send(MessageChain([Plain('这次没画出来——接口超时或报错了。等一会儿再让我试一次，别连发，我怕又撞上排队。')]))
+                return True
             return await self.deliver_drawing(event,image,model,prompt,plan)
 
     async def idle(self):
