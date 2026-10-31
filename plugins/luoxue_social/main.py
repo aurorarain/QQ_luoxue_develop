@@ -82,6 +82,17 @@ class OwnerPoke(filter.CustomFilter):
         return target is None or str(target)==str(event.get_self_id())
 
 
+class StopDrawing(filter.CustomFilter):
+    """"停" must actually stop the picture being generated. Private chat only; the group
+    path checks the same command inline so a single message never gets two replies."""
+
+    def filter(self,event,cfg):
+        from .image_policy import is_stop_command
+        if not event.is_private_chat():return False
+        if str(event.get_sender_id())!=OWNER:return False
+        return is_stop_command(event.get_message_str() or '')
+
+
 class PrivateDrawing(filter.CustomFilter):
     def filter(self,event,cfg):
         from .image_policy import is_draw_request,premium_request
@@ -187,6 +198,15 @@ class Social(Star):
     async def welcome(self, event):
         event.stop_event()
         await self.features.welcome(event)
+
+    @filter.custom_filter(StopDrawing, priority=130)
+    async def stop_drawing(self,event):
+        event.stop_event()
+        try:
+            self.features.cancel_drawing()
+            await event.send(MessageChain([Plain('好，停了。' if self.features.draw_active else '现在也没在画，手是空的。')]))
+        except Exception as exc:
+            logger.info('[luoxue_social] stop drawing failed: %s',type(exc).__name__)
 
     @filter.custom_filter(OwnerPoke, priority=120)
     async def private_poke(self,event):
@@ -294,6 +314,13 @@ class Social(Star):
         if (event.get_message_str() or '').strip().lstrip('/') in ('status', '状态', '社交状态'):
             await event.send(MessageChain([Plain(self.features.status())]))
             return
+        from .image_policy import is_stop_command
+        if is_stop_command(event.get_message_str() or ''):
+            requester=getattr(self.features,'draw_requester','')
+            if sender==OWNER or (requester and sender==requester):
+                self.features.cancel_drawing()
+                await event.send(MessageChain([Plain('好，停了。' if self.features.draw_active else '现在也没在画，手是空的。')]))
+                return
         if poke:
             key = (GROUP, sender)
             if time.time() - self.pokes.get(key, 0) < 30:
