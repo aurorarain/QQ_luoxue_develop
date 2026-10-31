@@ -140,15 +140,17 @@ class Features:
         body=re.sub(r'^\s*(?:@\S{1,16}|[@＠]\S{1,16}|洛雪|肥鱼)[\s，,：:]*','',value)
         if not re.search(r'@|艾特|点名',body):return []
         if not re.search(r'叫|喊|出来|冒泡|点名|@|艾特',body):return []
-        roster=[row for row in self.roster_cache if str(row.get('name') or '').strip()]
+        skip={str(getattr(self,'owner','')),str(getattr(self,'bot_id',''))}
+        roster=[row for row in self.roster_cache
+                if str(row.get('name') or '').strip() and str(row.get('qq')) not in skip]
 
         def hit(name):
-            if name in value:
+            if name in body:
                 return True
             # 简称：像"昔"这样只写了名字头一个字，且紧跟在 @ 或并列词后面。
             first=name[0] if name else ''
             if len(name)>=2 and first:
-                return bool(re.search(r'(?:@|和|、|,|，|跟|叫|喊|点)\s*'+re.escape(first),value))
+                return bool(re.search(r'(?:@|和|、|,|，|跟|叫|喊|点)\s*'+re.escape(first),body))
             return False
 
         found=[]
@@ -156,6 +158,12 @@ class Features:
             name=str(row['name'])
             if hit(name) and (name,row['qq']) not in found:
                 found.append((name,row['qq']))
+        if not found and re.search(r'群友|其他|其他人|大家|另外|都出来|都在',body) and re.search(r'叫|喊|出来|冒泡|点名',body):
+            # "把另外几位群友叫出来"：没具名时按名单里除主人和机器人以外的人处理。
+            for row in roster:
+                found.append((str(row['name']),str(row['qq'])))
+        if found:
+            logger.info('[luoxue_social] mentions resolved: %s',','.join(name for name,_ in found[:3]))
         return found[:3]
 
     def ensure_requested_mentions(self,event,chain):
@@ -581,13 +589,19 @@ class Features:
     async def send_reply(self,event,text):
         private=event.is_private_chat();session=event.unified_msg_origin
         await self.send_gap(session,media=False)
+        wanted=[] if private else self.requested_mentions(event.get_message_str() or '')
+        if wanted and '[at:' not in text:
+            # 模型没写标记时，由程序把 @ 放到第一条气泡最前面，并从正文里删掉名字。
+            text=''.join('[at:%s]'%qq for _,qq in wanted)+text
+            for name,_qq in wanted:
+                text=text.replace(name,'',1)
         chunks=split_reply(guard_output(text))
         reply_id=getattr(getattr(event,'message_obj',None),'message_id','') or ''
         for index,chunk in enumerate(chunks):
             chain=self.reply_chain(chunk,private,session)
             if index<len(chunks)-1:
-                # Only the final bubble may carry an @ or an image.
-                chain=[c for c in chain if isinstance(c,Plain)] or [Plain(chunk)]
+                # Only the final bubble may carry an image; @ 保留在它出现的那条气泡上。
+                chain=[c for c in chain if isinstance(c,(Plain,At))] or [Plain(chunk)]
             if (index==0 and not private and not any(isinstance(c,At) for c in chain)
                 and re.search(r'(?:@|艾特|at)我',event.get_message_str() or '',re.I)
                 and str(event.get_sender_id()) in {x['qq'] for x in self.roster_cache}):

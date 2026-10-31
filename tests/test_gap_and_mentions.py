@@ -9,6 +9,10 @@ from test_boundaries import features
 from astrbot.api.message_components import At, Plain
 
 
+async def _collect(event, chain):
+    event.sent.append(chain)
+
+
 ROSTER = [{'qq': '90001', 'name': '西洲'}, {'qq': '90002', 'name': '昔泠'}, {'qq': '90003', 'name': '路人'}]
 
 
@@ -68,6 +72,13 @@ class MentionResolution(unittest.TestCase):
     def test_no_names_found_returns_empty(self):
         self.assertEqual(build().requested_mentions('@洛雪 帮我@一下不存在的人，叫出来'), [])
 
+    def test_anonymous_group_request_targets_other_members(self):
+        f = build()
+        f.owner = '90001'
+        f.bot_id = 'BOT'
+        found = f.requested_mentions('@洛雪 帮我@一下另外三位群友，叫他们出来')
+        self.assertEqual([qq for _, qq in found], ['90002', '90003'])
+
     def test_bare_names_become_real_mentions_and_text_is_cleaned(self):
         f = build()
         event = types.SimpleNamespace(get_message_str=lambda: '@洛雪 帮我@一下西洲和昔，叫他们出来')
@@ -84,3 +95,23 @@ class MentionResolution(unittest.TestCase):
         event = types.SimpleNamespace(get_message_str=lambda: '帮我@西洲')
         chain = [At(qq='90001'), Plain('出来')]
         self.assertEqual(f.ensure_requested_mentions(event, chain), chain)
+
+class SendReplyMentions(unittest.IsolatedAsyncioTestCase):
+    async def test_program_puts_real_mentions_on_the_first_bubble(self):
+        f = build()
+        f.owner = '10001'; f.bot_id = '30001'
+        f.roster_cache = [{'qq': '10001', 'name': '主人'}, {'qq': '90001', 'name': '西洲'}, {'qq': '90002', 'name': '昔泠'}]
+        event = types.SimpleNamespace(
+            sent=[], is_private_chat=lambda: False, unified_msg_origin='g',
+            get_sender_id=lambda: '10001',
+            get_message_str=lambda: '@洛雪 你@一下西洲',
+            message_obj=types.SimpleNamespace(message_id='m1', raw_message={}))
+        event.send = lambda chain: _collect(event, chain)
+        with patch('luoxue_social.features.asyncio.sleep', AsyncMock()):
+            await f.send_reply(event, '西洲，出来冒个头。')
+        first = event.sent[0]
+        mentions = [c for c in (getattr(first, 'chain', first)) if isinstance(c, At)]
+        self.assertTrue(mentions, '第一个气泡必须带真实 @')
+        self.assertEqual(str(mentions[0].qq), '90001')
+        text = ''.join(getattr(c, 'text', '') or '' for c in (getattr(first, 'chain', first)))
+        self.assertNotIn('西洲', text)
