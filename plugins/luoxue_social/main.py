@@ -71,6 +71,17 @@ class MemberNotice(filter.CustomFilter):
         return str(event.get_group_id()) == GROUP and raw.get('notice_type') == 'group_increase'
 
 
+class OwnerPoke(filter.CustomFilter):
+    """Private poke from the owner: there is no text, so the core pipeline stays silent."""
+
+    def filter(self,event,cfg):
+        raw=event.message_obj.raw_message or {}
+        if not event.is_private_chat() or str(event.get_sender_id())!=OWNER:return False
+        if raw.get('sub_type')!='poke' and raw.get('notice_type')!='poke':return False
+        target=raw.get('target_id')
+        return target is None or str(target)==str(event.get_self_id())
+
+
 class PrivateDrawing(filter.CustomFilter):
     def filter(self,event,cfg):
         from .image_policy import is_draw_request,premium_request
@@ -176,6 +187,16 @@ class Social(Star):
     async def welcome(self, event):
         event.stop_event()
         await self.features.welcome(event)
+
+    @filter.custom_filter(OwnerPoke, priority=120)
+    async def private_poke(self,event):
+        event.stop_event()
+        try:
+            reply=random.choice(('别戳，尾巴要炸毛了。','戳我干嘛，有话直说。','嗯？在呢。','再戳我可要咬人了。','在的在的，说吧。'))
+            await event.send(MessageChain([Plain(reply)]))
+            self.add('private','洛雪（被戳）',reply)
+        except Exception as exc:
+            logger.info('[luoxue_social] private poke reply failed: %s',type(exc).__name__)
 
     @filter.custom_filter(PrivateDrawing, priority=120)
     async def private_drawing(self,event):

@@ -22,6 +22,9 @@ DRAW_IMPERATIVE = re.compile(r'(?:帮我|给我|替我|帮忙|麻烦|请|能不�
 DRAW_OBJECT = re.compile(r'(?:想要|想看|看看|要|求|来|做|生成|出|整|搞)\s*(?:一?[张幅个])?\s*'
                          r'[^，。！？\n]{0,12}?(?:的)?\s*(?:图|图片|壁纸|头像|立绘|插画|同人图|表情包)')
 DRAW_ENGLISH = re.compile(r'\b(?:draw|illustrate|imagine)\b', re.I)
+# 短祈使句："画沧月""画只猫""画洛丽塔"（"画画/画风/画质"这类不算）
+DRAW_SHORT = re.compile(r'^[画繪绘]\s*[\u4e00-\u9fffA-Za-z0-9]{1,10}$')
+DRAW_SHORT_NEGATIVE = re.compile(r'^画(?:\S)?(?:画|风|家|质|笔|饼|面|作|师|廊|法|板|纸)$|画画|画风|画质|画师|画法|画笔|画纸')
 DRAW_NEGATIVE = re.compile(r'动画|漫画|画风|画廊|画家|笔画|计划|规划|策划|刻画|画质|画饼|截图|视频')
 
 
@@ -31,6 +34,8 @@ def is_draw_request(text):
     if not value:
         return False
     if DRAW_QUANTIFIER.search(value) or DRAW_IMPERATIVE.search(value) or DRAW_ENGLISH.search(value):
+        return True
+    if DRAW_SHORT.match(value) and not DRAW_SHORT_NEGATIVE.search(value):
         return True
     if DRAW_NEGATIVE.search(value):
         return False
