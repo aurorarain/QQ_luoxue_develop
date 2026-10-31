@@ -394,9 +394,18 @@ class Social(Star):
                 return
             roster = await self.features.roster()
             memory = json.dumps(self.group_memory(text), ensure_ascii=False)
+            resolver=getattr(self.features,'requested_mentions',None)
+            wanted=resolver(text) if resolver else []
+            if not wanted and re.search(r'@|艾特|点名',text or ''):
+                wanted_hint='\n本轮群成员名单里没有解析到你要@的人；不要只写名字，直接说没找到对应成员。'
+            elif wanted:
+                wanted_hint=('\n本轮被要求点名的人：'+'、'.join('%s[at:%s]'%(name,qq) for name,qq in wanted)+
+                             '。必须原样输出这些[at:QQ号]标记，只写名字等于没点到；不要编造"一次只能点一个人"这类限制。')
+            else:
+                wanted_hint=''
             reply = await self.generate(f'公开群记录（包含被动观察，不代表每句话都需要回复）：{memory}\n主人QQ：{OWNER}\n群成员：{roster}\n当前发言者QQ：{sender}\n当前消息：{text}',
                 PUBLIC + self.features.public_instructions(sender)+self.clock_context('group')+
-                await self.features.web_context(text)+attachment_note(len(images)), event.unified_msg_origin,
+                await self.features.web_context(text)+attachment_note(len(images))+wanted_hint, event.unified_msg_origin,
                 image_urls=images or None)
             if not reply:
                 return
@@ -413,7 +422,9 @@ class Social(Star):
                         wav = await module.fish_tts(reply)
                         path = self.path.parent / ('group_voice_' + str(time.time_ns()) + '.wav')
                         path.write_bytes(wav)
+                        await self.features.send_gap(event.unified_msg_origin,media=True)
                         await event.send(MessageChain([Record(file=str(path), url=str(path))]))
+                        self.features.mark_sent(event.unified_msg_origin)
                         return
                     except Exception as exc:
                         logger.warning('[luoxue_social] group voice failed; using text: %s', type(exc).__name__)
