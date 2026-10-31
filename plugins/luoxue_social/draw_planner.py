@@ -18,9 +18,22 @@ INSTRUCTIONS = (
     '不写真实姓名、QQ号、手机号、链接、账号、单位地址，不编造真人长相和隐私细节。'
     '对象不明确时按上下文合理设定，不要反问；允许加入合理想象和审美判断。'
     '输出严格JSON，键固定为：subject 主体、scene 场景、composition 构图、camera 镜头、lighting 光照、'
-    'palette 色彩、style 风格、negative 需要避免的内容、prompt 最终提示词（80到300字，自然成句，含画面细节）。'
+    'palette 色彩、style 风格、negative 需要避免的内容、prompt 最终提示词（80到300字，自然成句，含画面细节）、'
+    'note 用一句30字以内的话说明你把对象理解成了谁或什么（是知名角色就点名，例如“按《某作品》的那位”；'
+    '不确定就写“按你说的猜的”；没有歧义就留空字符串）。'
     '只输出JSON，不输出解释、Markdown或任何额外文字。'
 )
+
+SALVAGE = re.compile(r'"prompt"\s*:\s*"(.*?)(?:"\s*[,}]|$)', re.S)
+
+
+def salvage(raw):
+    """Recover the prompt when the JSON was cut off (token limit) instead of dropping to raw text."""
+    match = SALVAGE.search(str(raw or ''))
+    if not match:
+        return {}
+    text = match.group(1).replace('\\n', ' ').replace('\\"', '"').strip().strip('"}')
+    return {'prompt': text} if text else {}
 
 
 def sanitize(text, limit=400):
@@ -104,16 +117,18 @@ async def plan(social, features, request, private, images=None, model='wan2.6-t2
     payload = json.dumps({'user_request': text, 'scope': scope, 'context': context,
                           'public_search': searched}, ensure_ascii=False)
     data = {}
+    raw = ''
     try:
         kwargs = {'image_urls': images} if images else {}
         raw = await social.generate(payload, INSTRUCTIONS, **kwargs)
         data = json.loads(re.sub(r'^```(?:json)?\s*|\s*```$', '', str(raw or '').strip()))
     except Exception:
-        data = {}
+        data = salvage(raw)
     if not isinstance(data, dict):
         data = {}
     prompt = clean_prompt(model, data, text)
     return {'prompt': prompt,
+            'note': sanitize(data.get('note'), 40),
             'plan': {key: sanitize(data.get(key), 120) for key in FIELDS if sanitize(data.get(key), 120)},
             'plan_source': 'model' if data else 'fallback',
             'scope': scope, 'used_search': bool(searched), 'used_images': len(images or [])}
