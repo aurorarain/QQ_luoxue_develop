@@ -17,7 +17,7 @@ from zoneinfo import ZoneInfo
 import aiohttp
 from astrbot.api import logger
 from astrbot.api.event import filter
-from astrbot.api.message_components import At, Image, Plain
+from astrbot.api.message_components import At, Image, Plain, Reply
 from astrbot.core.message.message_event_result import MessageChain
 from . import rhythm
 from .draw_planner import plan as plan_drawing
@@ -183,6 +183,52 @@ class Features:
                 '\n你的真实运行状态（按当前时刻计算）：'+json.dumps(self.self_status(),ensure_ascii=False)+
                 '\n你当前可只读了解的插件与能力（未配置不代表可用，不能执行任意文件操作）：'+json.dumps(self.capabilities(),ensure_ascii=False)+
                 '\n实际获取过的新鲜内容（标题/摘要级信息，不代表完整看过视频）：'+discoveries)
+
+    def note_sticker_combo(self,event,text):
+        """同一个人把同一张表情配同一句话发到第三次时，把这张表情收进自己的库。
+
+        只统计带文字的图片消息（文字+表情一起发，或文字后紧跟表情）；收集仍走
+        `collect()` 的视觉审核、去重和每日上限，不是无脑照搬。
+        """
+        try:
+            raw=(event.message_obj.raw_message or {}).get('message') or []
+            urls=[(item.get('data') or {}).get('url') or (item.get('data') or {}).get('file','')
+                  for item in raw if isinstance(item,dict) and item.get('type')=='image']
+        except Exception:
+            urls=[]
+        text=(text or '').strip()
+        url=next((item for item in urls if isinstance(item,str) and item.startswith('http')),None)
+        if not text or not url:
+            return
+        host=urlparse(url).hostname or ''
+        if url.startswith('http://') and any(host.endswith(x) for x in ('.qpic.cn','.gtimg.cn','.qq.com')):
+            url='https://'+url[len('http://'):]
+        digest=hashlib.sha256((url+text).encode()).hexdigest()[:16]
+        combos=self.s.state.setdefault('sticker_combos',{})
+        entry=combos.get(digest) or {'url':url,'text':text[:40],'count':0,'time':0}
+        entry['count']+=1;entry['time']=time.time();combos[digest]=entry
+        if len(combos)>200:
+            for key in list(combos)[:len(combos)-200]:combos.pop(key,None)
+        self.s.save()
+        if entry['count']>=3 and not entry.get('collected'):
+            entry['collected']=True;self.s.save()
+            task=asyncio.create_task(self.collect(url,event.is_private_chat()))
+            self.tasks.add(task);task.add_done_callback(self.tasks.discard)
+            logger.info('[luoxue_media] sticker combo hit 3, collecting it for her own use')
+
+    def should_quote(self,event):
+        """群里多人同时在问、或主人一口气发了好几条时，用 QQ 引用标明在回谁。"""
+        try:
+            if event.is_private_chat():
+                now=time.time()
+                recent=[row for row in (self.s.state.get('private') or [])[-6:]
+                        if now-row.get('time',0)<=90 and str(row.get('sender'))!='洛雪']
+                return len(recent)>=2
+            rows=(self.s.state.get('group_observed') or [])[-12:]
+            senders={str(row.get('sender')) for row in rows if str(row.get('sender'))!='洛雪'}
+            return len(senders)>=2
+        except Exception:
+            return False
 
     def self_status(self):
         """Runtime facts, not a hardcoded brochure: she answers '你会什么' from actual state."""
@@ -458,6 +504,7 @@ class Features:
     async def send_reply(self,event,text):
         private=event.is_private_chat();session=event.unified_msg_origin
         chunks=split_reply(guard_output(text))
+        reply_id=getattr(getattr(event,'message_obj',None),'message_id','') or ''
         for index,chunk in enumerate(chunks):
             chain=self.reply_chain(chunk,private,session)
             if index<len(chunks)-1:
@@ -467,6 +514,9 @@ class Features:
                 and re.search(r'(?:@|艾特|at)我',event.get_message_str() or '',re.I)
                 and str(event.get_sender_id()) in {x['qq'] for x in self.roster_cache}):
                 chain.insert(0,At(qq=str(event.get_sender_id())))
+            if index==0 and reply_id and self.should_quote(event):
+                # 群里多人同时在问时，用 QQ 引用标明这句在回谁。
+                chain.insert(0,Reply(id=reply_id))
             if index:
                 await asyncio.sleep(random.uniform(.8,1.8))
             await event.send(MessageChain(chain))
@@ -522,7 +572,11 @@ class Features:
         nontext=[x for x in result.chain if not isinstance(x,Plain)]
         private=event.is_private_chat();session=event.unified_msg_origin
         chunks=split_reply(guard_output(text))
-        result.chain=self.reply_chain(chunks[0],private,session)+nontext
+        quote=[]
+        reply_id=getattr(getattr(event,'message_obj',None),'message_id','') or ''
+        if reply_id and self.should_quote(event):
+            quote=[Reply(id=reply_id)]
+        result.chain=quote+self.reply_chain(chunks[0],private,session)+nontext
         if len(chunks)>1:
             # The pipeline sends result.chain itself; extra bubbles are delayed so they
             # arrive after the first one instead of racing it.

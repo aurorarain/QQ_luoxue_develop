@@ -18,7 +18,7 @@ except ImportError:
         def __init__(self,text=None,**kw):self.text=text;self.__dict__.update(kw)
         @classmethod
         def fromFileSystem(cls,path):return cls(file=path)
-    for name in ['Plain','At','Image','Record']:
+    for name in ['Plain','At','Image','Record','Reply']:
         setattr(sys.modules['astrbot.api.message_components'],name,type(name,(Component,),{}))
     class Filters:
         CustomFilter=type('CustomFilter',(),{})
