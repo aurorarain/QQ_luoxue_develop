@@ -586,10 +586,10 @@ class Features:
         if hasattr(self,'s'):self.s.save()
         return chain
 
-    async def send_reply(self,event,text):
+    async def send_reply(self,event,text,mentions=True):
         private=event.is_private_chat();session=event.unified_msg_origin
         await self.send_gap(session,media=False)
-        wanted=[] if private else self.requested_mentions(event.get_message_str() or '')
+        wanted=[] if (private or not mentions) else self.requested_mentions(event.get_message_str() or '')
         if wanted and '[at:' not in text:
             # 模型没写标记时，由程序把 @ 放到第一条气泡最前面，并从正文里删掉名字。
             text=''.join('[at:%s]'%qq for _,qq in wanted)+text
@@ -606,7 +606,7 @@ class Features:
                 and re.search(r'(?:@|艾特|at)我',event.get_message_str() or '',re.I)
                 and str(event.get_sender_id()) in {x['qq'] for x in self.roster_cache}):
                 chain.insert(0,At(qq=str(event.get_sender_id())))
-            if index==0 and not private:
+            if index==0 and not private and mentions:
                 chain=self.ensure_requested_mentions(event,chain)
             if index==0 and reply_id and self.should_quote(event):
                 # 群里多人同时在问时，用 QQ 引用标明这句在回谁。
@@ -1026,6 +1026,77 @@ class Features:
     @staticmethod
     def comment_key(post,comment):
         return ':'.join(map(str,['reply',post.uin,post.tid,comment.uin,comment.tid,comment.parent_tid,comment.create_time,hashlib.sha256(comment.content.encode()).hexdigest()[:16]]))
+
+    # ── 群聊主动插话（不 @ 也能开口，按相关度加权）────────────────
+    async def maybe_chime(self,event,text):
+        """没人点名时判断是否插一句；和洛雪/老大有关才明显更可能开口。"""
+        from . import engage
+        from .persona import PUBLIC_PERSONA
+        if not self.cfg.get('group_chime',True):return None
+        now=time.time();state=self.s.state
+        if now-state.get('chime_last',0)<180:return None
+        if now-state.get('group_last_reply',0)<120:return None
+        today=time.strftime('%Y-%m-%d');usage=state.setdefault('chime_usage',{})
+        if usage.get('day')!=today:usage.clear();usage.update(day=today)
+        usage.setdefault('count',0)
+        if usage['count']>=6:return None
+        score,reason=engage.chime_score(text)
+        if not engage.should_try(score,random):return None
+        try:
+            reply=await self.s.generate(
+                '下面这条群消息没有人叫你。判断你要不要插一句：'
+                '只在你本人或老大被提到、或你确实能自然接住时插话；'
+                '别人在聊与你无关的话题、在严肃求助、或在吵架时不要插。'
+                '要插就只输出一句话（20字以内，不要@人、不要解释），不插就只输出 SKIP。\n消息：'+text[:200],
+                PUBLIC_PERSONA)
+        except Exception:
+            return None
+        reply=re.sub(r'\s+',' ',str(reply or '')).strip()
+        if not reply or reply.upper().startswith('SKIP') or len(reply)>60:return None
+        usage['count']+=1;state['chime_last']=now;state['chime_reason']=reason;self.s.save()
+        logger.info('[luoxue_chime] chimed in (%s, score %.2f)',reason,score)
+        return reply
+
+    # ── 点歌（曲库=本地文件，不下载、不冒充自己唱的）────────────────
+    def songs_dir(self):
+        return str(self.cfg.get('songs_dir') or (self.root/'songs'))
+
+    def play_song(self,name=''):
+        from .engage import pick_song
+        return pick_song(self.songs_dir(),name)
+
+    # ── 提醒 ─────────────────────────────────────────────
+    def add_reminder(self,text,due):
+        rows=self.s.state.setdefault('reminders',[])
+        rid=hashlib.sha256((str(text)+str(due)+str(time.time())).encode()).hexdigest()[:8]
+        row={'id':rid,'due':float(due),'text':str(text)[:120],'created':time.time()}
+        self.s.state['reminders']=(rows+[row])[-50:]
+        self.s.save()
+        return row
+
+    def list_reminders(self):
+        now=time.time()
+        return [row for row in (self.s.state.get('reminders') or []) if row.get('due',0)>now-3600]
+
+    def delete_reminder(self,rid):
+        rows=self.s.state.get('reminders') or []
+        kept=[row for row in rows if str(row.get('id'))!=str(rid)]
+        if len(kept)==len(rows):return False
+        self.s.state['reminders']=kept;self.s.save();return True
+
+    def due_reminders(self,now=None):
+        now=now or time.time()
+        due=[row for row in (self.s.state.get('reminders') or []) if row.get('due',0)<=now and not row.get('sent')]
+        for row in due:row['sent']=True
+        if due:self.s.save()
+        return due
+
+    # ── 表情目录自查 ─────────────────────────────────────
+    def sticker_index(self):
+        per={}
+        for row in self.index:
+            per.setdefault(row['category'],[]).append(Path(row['file']).stem)
+        return per
 
     async def close(self):
         for task in self.tasks:task.cancel()

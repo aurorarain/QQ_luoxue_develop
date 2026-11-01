@@ -103,6 +103,14 @@ class MediaTurn(filter.CustomFilter):
         return str(event.get_group_id())==GROUP
 
 
+class SongRequest(filter.CustomFilter):
+    def filter(self,event,cfg):
+        text=event.get_message_str() or ''
+        if not re.search(r'唱首歌|唱一个|来一首|点歌|放首歌|放个歌|放一首',text):return False
+        if event.is_private_chat():return str(event.get_sender_id())==OWNER
+        return str(event.get_group_id())==GROUP
+
+
 class PrivateDrawing(filter.CustomFilter):
     def filter(self,event,cfg):
         from .image_policy import is_draw_request,premium_request
@@ -126,6 +134,7 @@ SAFE_TOOLS = {'read_memory_detail','read_todo','update_profile','update_soul','o
 SAFE_TOOLS |= {'anysearch_search', 'anysearch_extract', 'change_my_signature', 'change_my_status',
                'parse_media_url',
                'growth_status', 'observe_trait', 'ratify_growth', 'reject_growth', 'revoke_growth',
+               'add_reminder', 'list_reminders', 'delete_reminder', 'list_stickers',
                'qts_get_user_info', 'qts_get_recent_messages', 'qts_get_group_member_list',
                'qts_refresh_messages', 'qts_get_message_detail', 'qts_view_qq_avatar', 'qts_poke_user',
                'qts_delete_message', 'qts_repeat_message'}
@@ -196,6 +205,19 @@ class Social(Star):
         self.state[key]=time.time()
         if channel=='group':self.state['group_last_human']=time.time()
         self.save()
+        if channel=='group' and not group_wake(event):
+            # 没人点名时，按相关度决定要不要插一句；和洛雪/老大有关才明显更可能开口。
+            task=asyncio.create_task(self._maybe_chime(event))
+            self.features.tasks.add(task);task.add_done_callback(self.features.tasks.discard)
+
+    async def _maybe_chime(self,event):
+        try:
+            reply=await self.features.maybe_chime(event,event.get_message_str() or '')
+            if not reply:return
+            await self.features.send_reply(event,reply,mentions=False)
+            self.add('group','洛雪',reply)
+        except Exception as exc:
+            logger.info('[luoxue_social] chime skipped: %s',type(exc).__name__)
 
     def clock_context(self,channel):
         now=time.time();previous=self.state.get('previous_clock_'+channel,0)
@@ -253,6 +275,34 @@ class Social(Star):
                     pass
             event.message_str=text+'（同时发来一张图片或表情）'
             logger.info('[luoxue_social] text turn merged with %d picture(s)',len(slot['images']))
+
+    @filter.custom_filter(SongRequest, priority=140)
+    async def song_request(self,event):
+        event.stop_event()
+        text=event.get_message_str() or ''
+        name=re.sub(r'.{0,4}(?:唱首歌|唱一个|来一首|点歌|放首歌|放个歌|放一首)','',text).strip(' ，,。')
+        path=self.features.play_song(name)
+        if not path:
+            await event.send(MessageChain([Plain('曲库还是空的（songs/ 目录没有音频文件），暂时只能说话不能唱。')]))
+            return
+        await event.send(MessageChain([Plain('放一首《%s》——曲库里的现成音频，不是我本人唱的版本。'%path.stem),
+                                       Record(file=str(path),url=str(path))]))
+        self.add('private' if event.is_private_chat() else 'group','洛雪','[点歌] '+path.stem)
+
+    async def deliver_reminders(self):
+        try:
+            due=self.features.due_reminders()
+        except Exception as exc:
+            logger.info('[luoxue_social] reminder check failed: %s',type(exc).__name__);return
+        if not due:return
+        umo=self.state.get('owner_umo','')
+        if umo!='napcat:FriendMessage:'+OWNER:return
+        for row in due:
+            try:
+                await self.context.send_message(umo,MessageChain([Plain('提醒你：'+str(row.get('text'))[:120])]))
+                logger.info('[luoxue_social] reminder delivered: %s',row.get('id'))
+            except Exception as exc:
+                logger.info('[luoxue_social] reminder send failed: %s',type(exc).__name__)
 
     @filter.custom_filter(StopDrawing, priority=130)
     async def stop_drawing(self,event):
@@ -418,16 +468,21 @@ class Social(Star):
                 explicit = wants_voice_reply(text)
                 # Occasionally speak on her own instead of only when asked; bounded per day.
                 if explicit or self.features.proactive_voice_allowed(reply):
-                    try:
-                        wav = await module.fish_tts(reply)
+                    wav = None
+                    for attempt in (1, 2):
+                        try:
+                            wav = await module.fish_tts(reply)
+                            break
+                        except Exception as exc:
+                            logger.warning('[luoxue_social] voice attempt %d failed: %s', attempt, type(exc).__name__)
+                    if wav:
                         path = self.path.parent / ('group_voice_' + str(time.time_ns()) + '.wav')
                         path.write_bytes(wav)
                         await self.features.send_gap(event.unified_msg_origin,media=True)
                         await event.send(MessageChain([Record(file=str(path), url=str(path))]))
                         self.features.mark_sent(event.unified_msg_origin)
                         return
-                    except Exception as exc:
-                        logger.warning('[luoxue_social] group voice failed; using text: %s', type(exc).__name__)
+                    logger.info('[luoxue_social] voice unavailable after retry; falling back to text')
             await self.features.send_reply(event, reply)
         except Exception as exc:
             logger.error('[luoxue_social] group reply failed: %s', type(exc).__name__)
@@ -484,6 +539,39 @@ class Social(Star):
         if not event.is_private_chat() or str(event.get_sender_id())!=OWNER:return '只有主人私聊可以记录成长。'
         from .growth import observe
         return json.dumps(observe(self,trait,evidence),ensure_ascii=False)
+
+    @filter.llm_tool(name='add_reminder')
+    async def add_reminder_tool(self,event: AstrMessageEvent,when:str,what:str) -> str:
+        """设置一个提醒，到点主动私聊通知主人。when 支持“20分钟后”“今天18:30”“明天9点”；what 是提醒内容。只有主人私聊可用。"""
+        if not event.is_private_chat() or str(event.get_sender_id())!=OWNER:return '只有主人私聊可以设提醒。'
+        from .engage import parse_reminder
+        due=parse_reminder(when+' '+what) or parse_reminder(when)
+        if not due:return '没解析出时间，请用“20分钟后”“今天18:30”“明天9点”这类说法。'
+        row=self.features.add_reminder(what,due)
+        return json.dumps({'ok':True,'id':row['id'],
+                           'due':dt.datetime.fromtimestamp(due,TZ).strftime('%m-%d %H:%M'),'text':what},ensure_ascii=False)
+
+    @filter.llm_tool(name='list_reminders')
+    async def list_reminders_tool(self,event: AstrMessageEvent) -> str:
+        """查看还没到期的提醒。只有主人私聊可用。"""
+        if not event.is_private_chat() or str(event.get_sender_id())!=OWNER:return '只有主人私聊可以查提醒。'
+        rows=[{'id':row['id'],'due':dt.datetime.fromtimestamp(row['due'],TZ).strftime('%m-%d %H:%M'),
+               'text':row['text']} for row in self.features.list_reminders()]
+        return json.dumps(rows,ensure_ascii=False)
+
+    @filter.llm_tool(name='delete_reminder')
+    async def delete_reminder_tool(self,event: AstrMessageEvent,reminder_id:str) -> str:
+        """按 id 删除一个提醒。只有主人私聊可用。"""
+        if not event.is_private_chat() or str(event.get_sender_id())!=OWNER:return '只有主人私聊可以删提醒。'
+        return json.dumps({'ok':self.features.delete_reminder(reminder_id)},ensure_ascii=False)
+
+    @filter.llm_tool(name='list_stickers')
+    async def list_stickers_tool(self,event: AstrMessageEvent) -> str:
+        """查看本地表情库目录：每个分类有多少张、有哪些含义（文件名）。只有主人私聊可用。"""
+        if not event.is_private_chat() or str(event.get_sender_id())!=OWNER:return '只有主人私聊可以查表情目录。'
+        index=self.features.sticker_index()
+        return json.dumps({category:{'count':len(names),'meanings':names[:8]}
+                           for category,names in index.items()},ensure_ascii=False)
 
     @filter.llm_tool(name='growth_status')
     async def growth_status_tool(self,event: AstrMessageEvent) -> str:
@@ -613,6 +701,7 @@ class Social(Star):
         except Exception as exc: logger.info('[luoxue_social] reading skipped: %s',type(exc).__name__)
         await self.companion.daily(current)
         # Late-night care is dormant inside the owner's quiet hours (23:00-07:00).
+        await self.deliver_reminders()
         await self.night_care()
         if not 9 <= current.hour < 23:
             return
