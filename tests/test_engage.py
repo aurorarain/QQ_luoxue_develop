@@ -142,6 +142,11 @@ class MaybeChime(unittest.IsolatedAsyncioTestCase):
         f.s.state['chime_usage'] = {'day': time.strftime('%Y-%m-%d'), 'count': 6}
         self.assertIsNone(await f.maybe_chime(object(), '洛雪在吗'))
 
+    async def test_recent_group_reply_blocks_chime(self):
+        f = self.build()
+        f.s.state['group_last_reply'] = time.time()
+        self.assertIsNone(await f.maybe_chime(object(), '洛雪在吗'))
+
     async def test_unrelated_topic_usually_silent(self):
         f = self.build()
         random.seed(0)

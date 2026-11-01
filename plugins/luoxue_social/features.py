@@ -615,6 +615,9 @@ class Features:
                 await asyncio.sleep(random.uniform(.8,1.8))
             await event.send(MessageChain(chain))
             self.mark_sent(session)
+        if not private and hasattr(self,'s'):
+            self.s.state['group_last_reply']=time.time()
+            self.s.save()
 
     def proactive_voice_allowed(self,text):
         """Occasionally answer out loud. Bounded per day; never for long or technical replies."""
