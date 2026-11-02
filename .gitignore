@@ -17,3 +17,17 @@ private/
 !config/settings.example.json
 **/node_modules/
 .venv/
+
+# Private platform state, proxy exports and authentication material.
+.ssh/
+id_rsa
+id_ed25519
+*.p12
+*.pfx
+*.kdbx
+*.har
+*.session
+*proxies*.json
+napcat/
+ntqq/
+sessions/
