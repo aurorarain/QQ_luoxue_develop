@@ -1,11 +1,25 @@
 import * as THREE from 'three';
 import {furnish} from './furniture.js';
-import {makeLuoxue} from './character.js';
+import {makeAvatar} from './avatar.js';
 
-const spots={
-  center:[.53,0,.62],desk:[1.84,0,-.84],sofa:[-2.96,-.035,.98],bed:[-2.05,0,-.64],
-  window:[-.14,0,-2.02],shelf:[3.42,0,-1.76],wardrobe:[-3.7,0,-.86],door:[3.84,0,2.58],
-};
+const names={living:'客厅',bedroom:'卧室',study:'书房',gaming:'电竞房',garden:'后花园',kitchen:'厨房'};
+const stand={living:[.60,0,.72],bedroom:[-.8,0,.31],study:[1.91,0,.71],gaming:[.56,0,-.66],
+             garden:[.12,0,.39],kitchen:[1.33,0,-1.17]};
+function locate(state){
+  const activity=String(state.activity||''),spot=state.spot;
+  if(['asleep','nap'].includes(state.sleepMode))return ['bedroom',[-1.90,.90,-2.11],'sleep'];
+  const reading=/看书|读书|阅读|翻书/.test(activity)||(!activity&&state.action==='read');
+  if(reading)return ['study',stand.study,'read'];
+  if(/做饭|煮|炒|下厨|洗碗|吃饭|零食|吃东西/.test(activity)||state.action==='eat')return ['kitchen',stand.kitchen,'idle'];
+  if(/浇花|浇水|花园|园艺/.test(activity))return ['garden',stand.garden,'idle'];
+  if(/书架|学习|写字|日记|画画/.test(activity)||spot==='shelf')return ['study',stand.study,'idle'];
+  if(/游戏|电竞|刷贴吧|打两把|电脑/.test(activity)||state.action==='type')return ['gaming',stand.gaming,'idle'];
+  if(spot==='desk')return ['study',stand.study,'idle'];
+  if(/睡觉|起床|床上|换衣|衣柜|趴床|躺床/.test(activity)||spot==='bed'||spot==='wardrobe')
+    return ['bedroom',stand.bedroom,'idle'];
+  if(spot==='sofa'||/沙发|歇一会/.test(activity))return ['living',[-3.00,-.48,1.19],'sit'];
+  return ['living',stand.living,'idle'];
+}
 const clamp=(v,low,high)=>Math.max(low,Math.min(high,v));
 const $=id=>document.getElementById(id);
 
@@ -16,12 +30,25 @@ export function mount(){
   renderer.outputColorSpace=THREE.SRGBColorSpace;
   renderer.toneMapping=THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure=1.22;
-  const scene=new THREE.Scene();
   const camera=new THREE.OrthographicCamera(-6,6,4,-4,.1,90);
-  const world=furnish(scene), louxue=makeLuoxue(scene);
-  const ambient=new THREE.HemisphereLight('#fdf0f7','#745a85',2.05);scene.add(ambient);
-  const sun=new THREE.DirectionalLight('#ffe0c9',2.65);sun.position.set(1.9,7,4.6);scene.add(sun);
-  const rim=new THREE.DirectionalLight('#bcb3ff',1.18);rim.position.set(-4,4,-2);scene.add(rim);
+  const roomCache=new Map();
+  const avatarLayer=new THREE.Group();
+  const louxue=makeAvatar(avatarLayer,kind=>{
+    canvas.dataset.model=kind;
+    $('model-credit').hidden=kind!=='vrm';
+  });
+  let currentRoom='living',actualRoom='living',following=true,active;
+  function roomFor(id){
+    if(roomCache.has(id))return roomCache.get(id);
+    const scene=new THREE.Scene();
+    const world=furnish(scene,id);
+    const ambient=new THREE.HemisphereLight('#fdf0f7','#745a85',2.05);scene.add(ambient);
+    const sun=new THREE.DirectionalLight('#ffe0c9',2.65);sun.position.set(1.9,7,4.6);scene.add(sun);
+    const rim=new THREE.DirectionalLight('#bcb3ff',1.18);rim.position.set(-4,4,-2);scene.add(rim);
+    const room={scene,world,ambient,sun};
+    roomCache.set(id,room);
+    return room;
+  }
   const reduce=matchMedia('(prefers-reduced-motion: reduce)');
   const view={yaw:.47,pitch:.64,zoom:1,x:.06,y:.96,z:.02};
   const target={...view};
@@ -105,10 +132,33 @@ export function mount(){
       if(e.shiftKey)pan(x*20,y*20);else rotate(x*20,y*20);
     }
   });
-  $('room').onclick=()=>preset(false);$('louxue').onclick=()=>preset(true);
+  function show(id){
+    const changed=currentRoom!==id || !active;
+    currentRoom=id;active=roomFor(id);
+    canvas.dataset.room=id;$('room-name').textContent=names[id];
+    for(const item of $('rooms').querySelectorAll('[data-room]')){
+      item.setAttribute('aria-current',String(item.dataset.room===id));
+    }
+    avatarLayer.visible=!away && currentRoom===actualRoom;
+    if(avatarLayer.visible)active.scene.add(avatarLayer);
+    if(changed)preset(false);
+    lighting();
+  }
+  function setFollow(on){
+    following=on;$('follow').setAttribute('aria-pressed',String(on));
+    if(on&&!away)show(actualRoom);
+  }
+  $('rooms').addEventListener('click',event=>{
+    const id=event.target.closest('[data-room]')?.dataset.room;
+    if(id){setFollow(false);show(id);}
+  });
+  $('follow').onclick=()=>setFollow(!following);
+  $('room').onclick=()=>preset(false);
+  $('louxue').onclick=()=>{setFollow(true);preset(true);};
   $('minus').onclick=()=>zoom(.82);$('plus').onclick=()=>zoom(1.22);
   function lighting(){
     isWarm=override??(hour>=19||hour<7);
+    const {world,sun,ambient}=active;
     world.setWarm(isWarm);
     sun.color.set(isWarm?'#ffd0a8':'#ffe0c9');sun.intensity=isWarm?1.63:2.65;
     ambient.intensity=isWarm?1.37:2.05;
@@ -127,18 +177,19 @@ export function mount(){
       $('energy').setAttribute('aria-valuenow',String(energy));
       $('energy').firstElementChild.style.width=energy+'%';
       $('connection').dataset.connected='true';
-      $('connection-label').textContent=state.away?'洛雪 · 外出中':'洛雪 · 状态已同步';
+      const [id,position,pose]=locate(state);
+      const movedRoom=actualRoom!==id;
+      actualRoom=id;away=Boolean(state.away);sleeping=pose==='sleep';
+      $('connection-label').textContent=away?'洛雪 · 外出中':'洛雪 · '+names[id];
       const weather=state.weather||{};
       $('weather').textContent=[state.clock,weather.kind,typeof weather.temp==='number'?weather.temp+'°C':''].filter(Boolean).join(' · ')||'洛雪的家';
-      const read=/看书|读书|阅读|翻书/.test(state.activity||'')||(!state.activity&&state.action==='read');
-      sleeping=['asleep','nap'].includes(state.sleepMode);
-      away=Boolean(state.away);louxue.root.visible=!away;
       $('louxue').disabled=away;
-      if(away&&focus)preset(false);
-      const pose=sleeping?'sleep':state.spot==='sofa'?(read?'sit-read':'sit'):read?'read':'idle';
-      louxue.poseAt(sleeping?[-1.90,1.025,-2.11]:(spots[state.spot]||spots.center),pose);
       const newHour=parseInt(state.clock,10);
-      if(Number.isFinite(newHour)&&hour!==newHour){hour=newHour;lighting();}
+      if(Number.isFinite(newHour))hour=newHour;
+      louxue.poseAt(position,pose,movedRoom);
+      if(following&&!away)show(id);
+      else show(currentRoom);
+      if(away&&focus)preset(false);
     }catch{
       $('connection').dataset.connected='false';$('connection-label').textContent='房间状态暂未更新';
     }finally{
@@ -147,14 +198,14 @@ export function mount(){
   }
   canvas.addEventListener('webglcontextlost',event=>{event.preventDefault();$('fallback').hidden=false;});
   canvas.addEventListener('webglcontextrestored',()=>{$('fallback').hidden=true;});
-  addEventListener('resize',resize);resize();preset(false);lighting();
+  addEventListener('resize',resize);resize();show('living');
   let prev=performance.now();
   renderer.setAnimationLoop(now=>{
     const dt=clamp((now-prev)/1000,0,.05);prev=now;
     const t=now/1000;
     cameraPose(dt);louxue.update(t,dt,reduce.matches);
-    if(!reduce.matches)world.animate(t);
-    renderer.render(scene,camera);
+    if(!reduce.matches)active.world.animate(t);
+    renderer.render(active.scene,camera);
     if(!canvas.dataset.ready)canvas.dataset.ready='true';
   });
   sync();

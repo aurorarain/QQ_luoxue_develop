@@ -30,6 +30,11 @@
 
 脑图在 Canvas 中以带景深的空间坐标投影七个脑区，旋转、缩放、平移与节点命中共享同一套投影。支持双指缩放、滚轮、键盘以及复位按钮。搜索、脑区筛选和详情仍使用受保护的同一份数据接口。
 
-`deploy/room3d/` 包含房间页面、家具和原创程序化鲸鱼娘模型。页面使用站点原有的 Three.js r160（MIT），通过 `/room3d/vendor/three.module.js` 加载。状态读取走 `/roomapi/state`，仅展示公开字段。场景支持全景、角色近景、昼光和暖灯，读取活动与位置驱动角色表现。
+`deploy/room3d/` 包含六个独立场景的页面和模块。站点将这些文件放在 /room3d/house/，首页与 /room3d/home.html 可以复用同一个 HTML。原像素首页可通过 /pixel-room.html 打开。页面使用站点的 Three.js r160（MIT）、GLTFLoader 及 @pixiv/three-vrm 3.0.0（MIT），由 /room3d/vendor/ 提供。
 
-发布时先把原二维首页保存为 `pixel-room.html`，再部署房间模块。单独验收 `/room3d/home.html` 的 WebGL 和实时状态后，可把同一份房间页面设为三维目录与站点的默认首页。像素入口也用于不支持 WebGL 的浏览器。
+六个场景按需初始化，跟随模式从公开房间状态映射当前活动和位置，手动参观时只展示当前空间的家具。角色资产为 pixiv 的 Vita（β Ver AvatarSample_3，CC0）。部署时将上游模型文件 Vita.vrm 保存到 /room3d/assets/vita.vrm。模型加载失败时使用程序化鲸鱼娘模型。代码仓库无需附带模型文件。
+
+- [pixiv 发布条款](https://vroid.pixiv.help/hc/en-us/articles/360014900113)
+- [Vita.vrm 源文件](https://github.com/madjin/vrm-samples/blob/master/vroid/beta/Vita.vrm)
+
+发布时先验收 /room3d/house/home.html 的 WebGL、房间切换、实时状态与模型加载，再切换首页。

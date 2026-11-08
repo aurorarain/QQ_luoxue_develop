@@ -20,16 +20,32 @@ button:hover,.nav a:hover,button[aria-pressed=true]{background:#b89de230;border-
 #connection[data-connected="false"] .live{background:#e9b997}.meter{margin-top:9px;height:5px;background:#302c46;border-radius:8px;overflow:hidden}.meter i{display:block;height:100%;background:linear-gradient(90deg,#b9a4ef,#f3baaf);border-radius:8px}
 #fallback{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);z-index:3;width:min(360px,90vw);text-align:center}.fallback-link{display:inline-block;margin-top:11px;color:var(--mint)}
 @media(max-width:660px){header,footer{gap:8px;flex-wrap:wrap}.nav a,.toolbar button{padding:5px 7px;font-size:12px}.brand,.card{padding:8px 11px}.hud{padding:10px}.controls{margin-left:auto;justify-items:start}.caption{display:none}}
+
+.hud-top{display:grid;gap:10px}.rooms{pointer-events:auto;display:flex;gap:4px;flex-wrap:wrap;justify-self:end;justify-content:center;max-width:min(95vw,740px);background:#19192adc;border:1px solid var(--line);border-radius:12px;padding:4px;box-shadow:0 12px 30px #0907153d}
+.rooms button{font-size:13px;padding:5px 11px}.rooms button[aria-current=true]{background:#bb9bdd45;border-color:#f2d7ff66;color:#fff4ff}
+#follow{color:#d6f5f2}.model-credit{pointer-events:auto;color:#ccc1df;font-size:10px}
+@media(max-width:660px){.hud-top{gap:6px}.rooms{justify-self:center;gap:2px;padding:3px}.rooms button{font-size:11px;padding:4px 6px}.model-credit{font-size:9px}.brand p.dim{font-size:11px}}
 </style>
 <script type="importmap">{"imports":{"three":"/room3d/vendor/three.module.js"}}</script>
 </head>
 <body>
 <canvas id="scene" class="view" tabindex="0" aria-label="鲸落小屋，可拖动旋转，用滚轮缩放，方向键调整视角"></canvas>
 <div class="hud">
+  <div class="hud-top">
   <header>
-    <div class="brand"><p class="eyebrow">LUOXUE · WHALEFALL LOFT</p><h1>鲸落小屋</h1><p class="dim" id="weather">洛雪的家</p></div>
+    <div class="brand"><p class="eyebrow">LUOXUE · WHALEFALL LOFT</p><h1>鲸落小屋</h1><p class="dim"><span id="room-name">客厅</span> · <span id="weather">洛雪的家</span></p></div>
     <nav class="nav" aria-label="导航"><a href="/brain.html">大脑</a><a href="/log.html">日志</a><a href="/console.html">控制台</a><a href="/pixel-room.html">像素房间</a></nav>
   </header>
+  <div class="rooms" id="rooms" aria-label="房间导览">
+    <button type="button" data-room="living" aria-current="true">客厅</button>
+    <button type="button" data-room="bedroom" aria-current="false">卧室</button>
+    <button type="button" data-room="study" aria-current="false">书房</button>
+    <button type="button" data-room="gaming" aria-current="false">电竞房</button>
+    <button type="button" data-room="garden" aria-current="false">后花园</button>
+    <button type="button" data-room="kitchen" aria-current="false">厨房</button>
+    <button type="button" id="follow" aria-pressed="true">跟随洛雪</button>
+  </div>
+  </div>
   <footer>
     <section class="card" aria-label="洛雪实时状态">
       <p class="line" id="connection" data-connected="false"><span class="live"></span><span id="connection-label">连接房间状态</span></p>
@@ -37,6 +53,7 @@ button:hover,.nav a:hover,button[aria-pressed=true]{background:#b89de230;border-
       <div class="meter" id="energy" role="meter" aria-label="体力" aria-valuemin="0" aria-valuemax="100"><i></i></div>
     </section>
     <div class="controls">
+      <a id="model-credit" class="model-credit" href="https://vroid.pixiv.help/hc/en-us/articles/360014900113" target="_blank" rel="noopener noreferrer" hidden>3D 形象 · Vita / pixiv · CC0</a>
       <div class="caption">拖动旋转 · 双指或滚轮缩放 · 右键平移</div>
       <div class="toolbar" aria-label="镜头">
         <button type="button" id="room" aria-pressed="true">全景</button><button type="button" id="louxue" aria-pressed="false">看洛雪</button>
@@ -48,7 +65,7 @@ button:hover,.nav a:hover,button[aria-pressed=true]{background:#b89de230;border-
 </div>
 <div class="card" id="fallback" hidden><strong>3D 场景暂不可用</strong><p class="dim">可以从像素房间继续看洛雪。</p><a class="fallback-link" href="/pixel-room.html">打开像素房间</a></div>
 <script type="module">
-import('/room3d/loft.js').then(module=>module.mount()).catch(error=>{
+import('/room3d/house/loft.js').then(module=>module.mount()).catch(error=>{
   console.error(error);
   document.getElementById('fallback').hidden=false;
 });
