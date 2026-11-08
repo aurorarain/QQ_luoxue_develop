@@ -109,14 +109,14 @@ class Extensions(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(seen,['full'])
 
     def test_new_identity_is_nonromantic_and_boss_bound(self):
-        self.assertIn('唯一老大',persona.PERSONA)
-        self.assertIn('不是女友',persona.PERSONA)
-        self.assertIn('白米饭',persona.PERSONA)
+        self.assertIn('唯一老大',persona.CORE_PROMPT + persona.GROWTH_EXTRA_TEXT)
+        self.assertIn('不是女友',persona.CORE_PROMPT + persona.GROWTH_EXTRA_TEXT)
+        self.assertIn('白米饭',persona.CORE_PROMPT+persona.GROWTH_EXTRA_TEXT)
 
     def test_banter_rules_stay_playful_not_bureaucratic(self):
         # Synthetic banter must not be interpreted as an authorization check.
         for phrase in ['先接住对方的梗','别把玩笑当正事办','不要求对方解释','公事公办腔','第一反应要短']:
-            self.assertIn(phrase,persona.PERSONA)
+            self.assertIn(phrase,persona.CORE_PROMPT + persona.GROWTH_EXTRA_TEXT)
         self.assertIn('玩笑',persona.PUBLIC_PERSONA)
 
     def test_group_instructions_treat_banter_as_banter(self):

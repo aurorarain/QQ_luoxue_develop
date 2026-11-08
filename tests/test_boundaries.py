@@ -53,8 +53,11 @@ class Event:
 
 class Boundaries(unittest.IsolatedAsyncioTestCase):
     async def test_wake_and_poke(self):
-        self.assertFalse(main.group_wake(Event(wake=False)))
+        self.assertTrue(main.group_wake(Event(wake=False,text='洛雪你好')))
+        self.assertTrue(main.group_wake(Event(wake=False,text='雪雪在吗')))
+        # 现在不掷骰子：没点名也交给模型判断，所以一律放行（除了 @ 别人）
         self.assertTrue(main.group_wake(Event(wake=False,text='肥鱼你好')))
+        self.assertTrue(main.group_wake(Event(wake=False,text='鲸鱼在吗')))
         self.assertFalse(main.group_wake(Event(group='99999')))
         self.assertTrue(main.group_wake(Event(raw={'sub_type':'poke','target_id':30001})))
         self.assertFalse(main.group_wake(Event(raw={'sub_type':'poke','target_id':99999})))

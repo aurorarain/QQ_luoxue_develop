@@ -11,7 +11,7 @@ from astrbot.api import logger
 
 MAX_IMAGES = 2
 MAX_SIDE = 1280
-MAX_DECODED = 4_000_000  # bytes accepted before compression
+MAX_DECODED = 8_000_000  # bytes accepted before compression
 JPEG_QUALITY = 82
 
 
@@ -58,13 +58,29 @@ def to_data_url(raw, max_side=MAX_SIDE):
     return _to_jpeg_data_url(raw, max_side)
 
 
+def media_messages(event):
+    """这条消息里除了普通图片以外，还有没有表情/商城表情之类她可能读不到的东西。"""
+    from astrbot.api.message_components import Image
+    found = []
+    for component in event.get_messages() or []:
+        name = type(component).__name__
+        if isinstance(component, Image):
+            continue
+        if name in ('Face', 'Mface', 'MarketFace') or 'face' in name.lower():
+            summary = getattr(component, 'summary', '') or getattr(component, 'name', '')
+            found.append(str(summary or '一个表情'))
+    return found
+
+
 async def attachment_images(event, limit=MAX_IMAGES):
     """Return (data_urls, report) for at most `limit` images of this exact event."""
     from astrbot.api.message_components import Image
     urls = []
     report = {'attached': 0, 'skipped': 0}
     for component in event.get_messages() or []:
-        if not isinstance(component, Image):
+        is_image = isinstance(component, Image)
+        url = getattr(component, 'url', '') if not is_image else ''
+        if not is_image and not (url and type(component).__name__.lower().find('face') >= 0):
             continue
         if len(urls) >= limit:
             report['skipped'] += 1

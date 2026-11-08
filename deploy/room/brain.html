@@ -1,0 +1,244 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>洛雪 · 大脑</title>
+<style>
+:root{color-scheme:dark;--bg:#070b14;--surface:#101a2a;--line:#26364d;--ink:#e8effc;--muted:#a7b8ce;--cyan:#a3e9ed}
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(ellipse at top left,#142642,var(--bg) 38rem);color:var(--ink);font:14px/1.5 system-ui,sans-serif}
+button,input{font:inherit;color:inherit;background:#132138;border:1px solid var(--line);border-radius:8px;padding:8px 12px}button{cursor:pointer}button:hover,button[aria-pressed="true"]{border-color:var(--cyan)}:focus-visible{outline:2px solid var(--cyan);outline-offset:3px}
+a{color:var(--cyan)}[hidden]{display:none!important}header,main{max-width:1440px;margin:auto;padding:18px 24px}header{display:flex;align-items:center;justify-content:space-between;gap:12px;border-bottom:1px solid var(--line)}
+h1,h2,h3,p{margin:0}h1{font-size:23px}h2{font-size:16px}h3{font-size:14px}nav{display:flex;gap:15px}.muted{color:var(--muted)}
+.workspace{display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:16px}.card{background:#101a2ade;border:1px solid var(--line);border-radius:14px;padding:15px;min-width:0}
+.toolbar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between}.toolbar input{width:min(100%,250px)}.filters{margin:13px 0 7px;display:flex;gap:6px;flex-wrap:wrap}.filters button{padding:4px 9px}.dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;background:var(--region)}
+#chart{display:block;width:100%;height:clamp(355px,56vh,570px);border-radius:10px;background:#0a1321;touch-action:pan-y}#tooltip{min-height:22px;margin-top:8px;overflow-wrap:anywhere}
+aside{display:grid;gap:13px;align-content:start}#detail{overflow-wrap:anywhere}#detail header{padding:0;border:0;align-items:start}#detail p{margin-top:6px}dl{margin:10px 0;display:grid;grid-template-columns:auto 1fr;gap:5px 12px}dd{margin:0;min-width:0}dt{color:var(--muted)}
+#neighbors,#results,#recent{display:grid;gap:5px;margin-top:9px;max-height:245px;overflow:auto}#neighbors button,#results button{text-align:left;overflow-wrap:anywhere}#recent article{padding:6px 0;border-top:1px solid var(--line);overflow-wrap:anywhere}#recent small{color:var(--muted)}
+#gate{max-width:410px;margin:9vh auto;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:24px}#gate form{display:grid;gap:10px;margin-top:12px}#gate-msg,#status{min-height:21px}.error{color:#ffaeaa}
+@media(max-width:840px){.workspace{grid-template-columns:1fr}main,header{padding:12px}nav{gap:9px}#chart{height:430px}}
+</style>
+</head>
+<body>
+<header>
+  <div><div class="muted">独处与日常</div><h1>洛雪的大脑</h1></div>
+  <nav aria-label="导航"><a href="/">房间</a><a href="/log.html">日志</a><a href="/console.html">控制台</a><button id="lock" hidden>锁定</button></nav>
+</header>
+<main>
+<section id="gate">
+  <h2>解锁大脑</h2><p class="muted">这里记录洛雪的记忆、计划与真实执行结果。</p>
+  <form><label for="password">管理口令</label><input id="password" type="password" required autocomplete="current-password"><button>进入</button><p class="error" id="gate-msg" role="status"></p></form>
+</section>
+<div id="workspace" class="workspace" hidden>
+  <section class="card" aria-label="心智图谱">
+    <div class="toolbar"><div><h2>心智图谱</h2><p id="stats" class="muted"></p></div>
+    <input id="search" type="search" aria-label="搜索脑图节点" placeholder="搜索记忆、计划和能力"></div>
+    <div id="filters" class="filters" aria-label="脑区筛选"></div>
+    <canvas id="chart" aria-label="七个脑区的节点图谱，键盘可使用下方节点列表"></canvas>
+    <p class="muted" id="tooltip">选中节点可以查看详情和关联。</p>
+    <p id="status" class="error" role="status"></p>
+  </section>
+  <aside aria-label="节点和活动">
+    <section id="detail" class="card" hidden>
+      <header><h2 id="title"></h2><button id="close" aria-label="关闭节点详情">×</button></header>
+      <dl id="fields"></dl><h3>关联节点</h3><div id="neighbors"></div>
+    </section>
+    <section class="card"><h2>独处活动</h2><p class="muted" id="next"></p><div id="recent"></div></section>
+    <section class="card"><h2 id="list-title">节点列表</h2><div id="results"></div></section>
+  </aside>
+</div>
+</main>
+<script>
+'use strict';
+const $ = id => document.getElementById(id);
+const REGIONS = {
+  persona:['人设','#ffe09a'], goal:['目标','#8df5db'], emotion:['情绪与需要','#ffadcf'],
+  memory:['记忆','#91d5ff'], relation:['关系','#d1b6ff'], interest:['兴趣','#b5edab'], skill:['技能','#ffc09a']
+};
+const LABELS = {at:'记下于',role:'人物',w:'权重',imp:'重要度',retention:'保真度',stability:'稳定性（天）',
+  hits:'强化次数',kws:'关键词',tags:'标签',value:'当前值',category:'类别',count:'公开记录条数',
+  last:'最近时间',weight:'兴趣权重',enabled:'已开启',attempts:'近 60 轮记录',completed:'完成次数',
+  due:'到期时间',page:'已读页数',total:'总页数'};
+const ACTION = {read:'阅读',browse:'浏览',rest:'休息',message:'主动私聊',none:'静观'};
+const OUTCOME = {done:'完成',idle:'安静',blocked:'跳过',failed:'失败',running:'执行中',interrupted:'中断'};
+const LINK = {'plan-action':'计划所用能力','memory-keyword':'共同关键词','persona-tag':'共有标签','interest-memory':'兴趣词匹配'};
+const cv = $('chart'), ctx = cv.getContext('2d');
+const key = 'luoxue_brain_pw';
+let data, password, selected, hovered, region, timer, loading, generation = 0;
+let byId = new Map(), positions = new Map(), related = new Map(), matches = new Set();
+let width = 0, height = 0;
+const fmt = t => t ? new Date(t * 1000).toLocaleString('zh-CN',{timeZone:'Asia/Shanghai',hour12:false}) : '—';
+const create = (tag,text) => Object.assign(document.createElement(tag),{textContent:text});
+function button(text, handler){ const el=create('button',text);el.type='button';el.onclick=handler;return el; }
+function hash(value){let h=2166136261;for(const ch of value){h=Math.imul(h ^ ch.codePointAt(0),16777619);}return h>>>0;}
+function layout(){
+  if (!data || $('workspace').hidden) return;
+  const rect=cv.getBoundingClientRect(), dpr=Math.min(2,devicePixelRatio || 1);
+  width=rect.width;height=rect.height;cv.width=width*dpr;cv.height=height*dpr;
+  ctx.setTransform(dpr,0,0,dpr,0,0);positions.clear();
+  const wide=width>=620;
+  const centers=wide ? [[.18,.22],[.82,.22],[.14,.53],[.50,.49],[.86,.53],[.25,.82],[.75,.82]]
+                     : [[.23,.15],[.76,.15],[.20,.42],[.51,.43],[.81,.42],[.23,.78],[.76,.78]];
+  Object.keys(REGIONS).forEach((id,index)=>{
+    const [fx,fy]=centers[index], x=fx*width,y=fy*height;
+    const members=data.nodes.filter(n=>n.region===id).sort((a,b)=>hash(a.id)-hash(b.id));
+    const spread=Math.min(id==='memory'?width*.18:width*.115,id==='memory'?height*.22:height*.124);
+    members.forEach((n,i)=>{
+      const radius=spread*Math.sqrt((i+.4)/Math.max(1,members.length));
+      const angle=i*2.399963;
+      positions.set(n.id,{x:x+radius*Math.cos(angle),y:y+radius*Math.sin(angle),
+        r:Math.max(1.5,(2+3.7*n.w)*(members.length>100?.73:1))});
+    });
+  });
+  draw(centers);
+}
+function draw(centers){
+  if (!data || !width) return;
+  ctx.clearRect(0,0,width,height);
+  const wide=width>=620;
+  centers ||= wide ? [[.18,.22],[.82,.22],[.14,.53],[.50,.49],[.86,.53],[.25,.82],[.75,.82]]
+                   : [[.23,.15],[.76,.15],[.20,.42],[.51,.43],[.81,.42],[.23,.78],[.76,.78]];
+  Object.entries(REGIONS).forEach(([id,[name,color]],i)=>{
+    const [fx,fy]=centers[i],x=fx*width,y=fy*height,r=Math.min(width*.21,height*.22);
+    const gradient=ctx.createRadialGradient(x,y,1,x,y,r);
+    gradient.addColorStop(0,color+'25');gradient.addColorStop(1,color+'00');
+    ctx.fillStyle=gradient;ctx.fillRect(x-r,y-r,r*2,r*2);
+    ctx.fillStyle=color;ctx.font='12px system-ui';ctx.textAlign='center';
+    ctx.fillText(name,x,y-Math.min(height*.14,width*(id==='memory'?.19:.13)));
+  });
+  const focused=related.get(selected) || [];
+  for(const bright of [false,true]){
+    ctx.beginPath();
+    for (const edge of data.links){
+      const a=positions.get(edge.a),b=positions.get(edge.b);
+      const active=!!selected && (edge.a===selected || edge.b===selected);
+      if (!a || !b || active!==bright) continue;
+      if (!active && (selected || !matches.has(edge.a) || !matches.has(edge.b))) continue;
+      ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);
+    }
+    ctx.lineWidth=bright?1.5:.75;ctx.strokeStyle=bright?'#cdefffbb':'#96c6ec29';ctx.stroke();
+  }
+  const neighbors=new Set(focused.map(link=>link.id));
+  for (const [id,p] of positions){
+    const n=byId.get(id), active=id===selected || id===hovered, near=neighbors.has(id);
+    ctx.globalAlpha=active || near ? 1 : matches.has(id) && !selected ? .35+n.w*.65 : .12;
+    ctx.fillStyle=REGIONS[n.region][1];ctx.beginPath();ctx.arc(p.x,p.y,p.r+(active?2:0),0,Math.PI*2);ctx.fill();
+    if(active){ctx.strokeStyle='#fff';ctx.beginPath();ctx.arc(p.x,p.y,p.r+5,0,Math.PI*2);ctx.stroke();}
+  }
+  ctx.globalAlpha=1;
+}
+function refreshMatches(){
+  const query=$('search').value.trim().toLowerCase();
+  matches=new Set(data.nodes.filter(n=>(!region||n.region===region) &&
+    (!query||[n.label,...Object.values(n.meta||{})].join(' ').toLowerCase().includes(query))).map(n=>n.id));
+  for (const el of $('filters').children) el.setAttribute('aria-pressed',String((el.dataset.region || null)===region));
+  const sorted=data.nodes.filter(n=>matches.has(n.id)).sort((a,b)=>b.w-a.w);
+  $('list-title').textContent='节点列表 · '+sorted.length;
+  $('results').replaceChildren(...sorted.map(n=>button(REGIONS[n.region][0]+' · '+n.label,()=>select(n.id,true))));
+  if (!sorted.length) $('results').append(create('p','没有匹配的节点。'));
+  draw();
+}
+function select(id,scroll=false){
+  selected=id;const node=byId.get(id);$('detail').hidden=!node;
+  if (!node){draw();return;}
+  $('title').textContent=REGIONS[node.region][0]+' · '+node.label;
+  $('fields').replaceChildren();
+  for(const [name,value] of Object.entries({w:node.w,...node.meta})){
+    if(value===null || value===undefined || value==='') continue;
+    const text=['at','last','due'].includes(name)?fmt(value):Array.isArray(value)?value.join('、'):
+      typeof value==='boolean'?(value?'是':'否'):String(value);
+    $('fields').append(create('dt',LABELS[name]||name),create('dd',text));
+  }
+  const links=related.get(id) || [];
+  $('neighbors').replaceChildren(...links.map(item=>button(byId.get(item.id).label+' · '+(LINK[item.kind]||'关联'),()=>select(item.id))));
+  if(!links.length) $('neighbors').append(create('p','暂无关联。'));
+  if(scroll && innerWidth<=840) $('detail').scrollIntoView({block:'nearest'});
+  draw();
+}
+function render(){
+  byId=new Map(data.nodes.map(n=>[n.id,n]));related=new Map();
+  for(const edge of data.links){
+    if(!byId.has(edge.a)||!byId.has(edge.b)) continue;
+    for(const [from,id] of [[edge.a,edge.b],[edge.b,edge.a]]){
+      if(!related.has(from)) related.set(from,[]);
+      related.get(from).push({id,kind:edge.kind});
+    }
+  }
+  $('stats').textContent=data.stats.nodes+' 个节点 · '+data.stats.links+' 条关联 · '+fmt(data.serverTime);
+  $('filters').replaceChildren(button('全部',()=>{region=null;select(null);refreshMatches();}));
+  for(const r of data.regions){
+    const [name,color]=REGIONS[r.id];
+    const el=button(name+' '+r.count,()=>{region=region===r.id?null:r.id;select(null);refreshMatches();});
+    el.dataset.region=r.id;el.style.setProperty('--region',color);
+    el.prepend(create('span',''));el.firstChild.className='dot';
+    $('filters').append(el);
+  }
+  const brain=data.autonomy;
+  $('next').textContent=!brain.enabled?'独处活动已暂停':brain.restUntil>data.serverTime?'休息至 '+fmt(brain.restUntil):
+    brain.nextAt?'下次检查约 '+fmt(brain.nextAt):'等待第一轮心跳';
+  $('recent').replaceChildren(...brain.recent.map(row=>{
+    const el=create('article','');
+    el.append(create('small',fmt(row.at)+' · '+(ACTION[row.action]||row.action)+' · '+(OUTCOME[row.outcome]||row.outcome)));
+    if(row.thought) el.append(create('p','念头 · '+row.thought));
+    if(row.result) el.append(create('p','结果 · '+row.result));
+    return el;
+  }));
+  if(!brain.recent.length) $('recent').append(create('p','还没有新版心跳记录。'));
+  if(!byId.has(selected)) selected=null;
+  layout();refreshMatches();select(selected);
+}
+function hit(e){
+  const bounds=cv.getBoundingClientRect();let best=null, dist=14;
+  for(const [id,p] of positions){
+    if(!matches.has(id) && !related.get(selected)?.some(link=>link.id===id)) continue;
+    const d=Math.hypot(e.clientX-bounds.left-p.x,e.clientY-bounds.top-p.y);
+    if(d<dist){best=id;dist=d;}
+  }
+  return best;
+}
+cv.addEventListener('pointermove',e=>{
+  const id=hit(e);if(id===hovered)return;hovered=id;draw();
+  $('tooltip').textContent=byId.get(id)?.label||'选中节点可以查看详情和关联。';
+});
+cv.addEventListener('pointerleave',()=>{hovered=null;$('tooltip').textContent='选中节点可以查看详情和关联。';draw();});
+cv.addEventListener('click',e=>select(hit(e),true));
+$('close').onclick=()=>{select(null);$('search').focus();};
+$('search').oninput=()=>{select(null);refreshMatches();};
+addEventListener('keydown',e=>{if(e.key==='Escape' && selected)$('close').click();});
+new ResizeObserver(layout).observe(cv);
+function lock(message=''){
+  generation++;loading=false;clearTimeout(timer);sessionStorage.removeItem(key);password=null;data=null;
+  byId.clear();related.clear();positions.clear();matches.clear();selected=hovered=region=null;
+  for(const id of ['title','fields','neighbors','recent','results','next','stats','filters','status','tooltip']) $(id).replaceChildren();
+  $('search').value='';$('workspace').hidden=true;$('lock').hidden=true;$('gate').hidden=false;
+  $('gate-msg').textContent=message;$('password').focus();
+}
+async function load(pwd){
+  if(loading)return;loading=true;const ticket=generation;
+  try{
+    const response=await fetch('/roomapi/brain',{cache:'no-store',headers:{'X-Password':pwd},signal:AbortSignal.timeout(8000)});
+    if(ticket!==generation)return;
+    if(response.status===403){lock('口令无效，请重新输入。');return;}
+    if(!response.ok) throw new Error('http');
+    const payload=await response.json();
+    if(ticket!==generation)return;
+    data=payload;password=pwd;sessionStorage.setItem(key,pwd);
+    $('workspace').hidden=false;$('gate').hidden=true;$('lock').hidden=false;$('status').textContent='';
+    $('password').value='';render();
+  }catch{
+    if(ticket!==generation)return;
+    $(data?'status':'gate-msg').textContent='暂时读不到脑图，可以重新尝试。';
+  }finally{
+    if(ticket===generation){
+      loading=false;clearTimeout(timer);
+      if(password)timer=setTimeout(()=>load(password),30000);
+    }
+  }
+}
+$('gate').querySelector('form').onsubmit=e=>{e.preventDefault();load($('password').value.trim());};
+$('lock').onclick=()=>lock();
+const saved=sessionStorage.getItem(key)||sessionStorage.getItem('luoxue_console_pwd');
+if(saved)load(saved);
+</script>
+</body>
+</html>

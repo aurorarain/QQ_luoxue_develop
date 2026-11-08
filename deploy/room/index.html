@@ -1,0 +1,1186 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>洛雪的房间</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root{--ink:#eef5ff;--dim:#9fb3d3;--cyan:#8fe3ff;--glass:rgba(9,13,26,.66);--line:rgba(143,227,255,.2)}
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%;overflow:hidden;background:#05070f;color:var(--ink);
+    font-family:"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif}
+  #wrap{position:fixed;inset:0;display:grid;place-items:center}
+  canvas{image-rendering:pixelated;width:100%;height:100%;object-fit:contain}
+
+  /* galgame 风格角色面板 */
+  #panel{position:fixed;left:18px;bottom:18px;z-index:6;width:342px;background:linear-gradient(160deg,rgba(20,26,48,.9),rgba(10,13,26,.82));
+    border:1px solid rgba(150,210,255,.28);border-radius:18px;padding:12px 14px 14px;
+    box-shadow:0 18px 44px rgba(0,0,0,.55), inset 0 1px 0 rgba(255,255,255,.06);backdrop-filter:blur(14px)}
+  #panel .top{display:flex;gap:10px;align-items:center;margin-bottom:8px}
+  #panel .face{width:46px;height:46px;border-radius:12px;object-fit:cover;object-position:top;
+    border:1px solid rgba(150,210,255,.35);box-shadow:0 0 18px rgba(120,200,255,.3)}
+  #panel .who{flex:1}
+  #panel .nm{font-size:16px;font-weight:700;letter-spacing:.5px}
+  #panel .sub{font-size:11px;color:var(--dim);margin-top:2px}
+  #panel .moodline{font-size:11.5px;color:#cfe3ff;margin:6px 0 8px;min-height:16px}
+  .stat{display:grid;grid-template-columns:38px 1fr 30px;gap:8px;align-items:center;margin:5px 0;font-size:11.5px}
+  .stat span:first-child{color:#a9bfe0}
+  .stat .track{height:8px;border-radius:5px;background:rgba(255,255,255,.08);overflow:hidden;
+    box-shadow:inset 0 1px 2px rgba(0,0,0,.4)}
+  .stat .fill{height:100%;border-radius:5px;transition:width 1.4s ease}
+  .stat .val{text-align:right;color:#dbe9ff;font-variant-numeric:tabular-nums}
+  .f1{background:linear-gradient(90deg,#4fd1ff,#7f9dff)}
+  .f2{background:linear-gradient(90deg,#ff9ed2,#ff6fa5)}
+  .f3{background:linear-gradient(90deg,#ffd36f,#ff9d5c)}
+  .f4{background:linear-gradient(90deg,#8fe3b0,#4fc7a0)}
+  .f5{background:linear-gradient(90deg,#c6a4ff,#8f6fff)}
+  .f6{background:linear-gradient(90deg,#7fa6d6,#4b6f9c)}
+  .f7{background:linear-gradient(90deg,#ffb3a7,#e0705f)}
+  #weatherbox{top:14px;left:16px;min-width:132px;text-align:left}
+  #weatherbox .wrow{display:flex;gap:8px;align-items:baseline;font-size:13px;font-weight:600}
+  #weatherbox .wclock{font-size:17px;font-weight:700;letter-spacing:1px;color:#dff0ff;margin-top:2px}
+  #weatherbox #wicon{font-size:17px}
+  #panel .tagbox{display:flex;flex-wrap:wrap;gap:4px;margin:2px 0 6px}
+  #panel .tag{display:inline-block;border:1px solid rgba(150,210,255,.24);border-radius:999px;
+    padding:1px 7px;margin:2px 4px 0 0;font-size:10px;line-height:1.6;color:#cfe3ff;
+    background:rgba(143,227,255,.08);white-space:nowrap}
+  #panel .moodtags{display:flex;flex-wrap:wrap;gap:4px;margin:2px 0 4px}
+  #panel .mtag{font-size:10px;color:#cfe3ff;border:1px solid rgba(150,210,255,.22);
+    border-radius:999px;padding:1px 7px;background:rgba(150,210,255,.08)}
+  #panel .wish{margin-top:8px;font-size:11px;color:#ffe6a8;min-height:14px;line-height:1.5}
+  #panel .money{margin-top:8px;padding-top:7px;border-top:1px dashed rgba(143,227,255,.16);font-size:11px}
+  #panel .mrow{display:flex;justify-content:space-between;align-items:baseline}
+  #panel .mrow b{color:#ffe0a0;font-size:13px}
+  #panel.collapsed .money{display:none}
+  #panel #ledgerbtn{margin-top:6px;width:100%;background:rgba(255,255,255,.06);
+    border:1px solid rgba(150,210,255,.24);border-radius:8px;color:#bfd9ff;font-size:11px;
+    padding:4px 0;cursor:pointer}
+  #ledger{position:fixed;inset:0;z-index:20;display:none;place-items:center;background:rgba(4,7,16,.66)}
+  #ledger.show{display:grid}
+  #ledger .box{width:min(430px,92vw);max-height:70vh;overflow:auto;background:rgba(14,19,36,.96);
+    border:1px solid rgba(150,210,255,.28);border-radius:16px;padding:16px 18px;
+    box-shadow:0 24px 60px rgba(0,0,0,.6)}
+  #ledger h3{font-size:15px;margin-bottom:4px}
+  #ledger .sub{font-size:11px;color:#9fb3d3;margin-bottom:10px}
+  #ledger .income{font-size:11.5px;color:#cfe3ff;background:rgba(143,227,255,.06);
+    border:1px solid rgba(150,210,255,.18);border-radius:10px;padding:8px 10px;line-height:1.8}
+  #ledger .income b{color:#ffe0a0}
+  #ledger #econbtn{margin-top:8px;width:100%;background:rgba(255,255,255,.06);
+    border:1px solid rgba(150,210,255,.24);border-radius:8px;color:#bfd9ff;font-size:11.5px;
+    padding:5px 0;cursor:pointer}
+  #ledger .econrow{display:grid;grid-template-columns:1.2fr .6fr .6fr 24px;gap:6px;margin:4px 0;font-size:11px}
+  #ledger .econrow.shop{grid-template-columns:1fr 1fr .6fr 24px}
+  #ledger .econrow input{width:100%;background:rgba(255,255,255,.06);border:1px solid rgba(150,210,255,.2);
+    border-radius:6px;padding:2px 6px;color:#eaf3ff;font-size:11px;outline:none}
+  #ledger .econrow button{background:rgba(255,120,120,.18);border:1px solid rgba(255,140,140,.35);
+    border-radius:6px;color:#ffc9c9;cursor:pointer;font-size:11px}
+  #ledger .storename{background:rgba(255,255,255,.08);border:1px solid rgba(150,210,255,.24);
+    border-radius:6px;padding:2px 8px;color:#eaf3ff;font-size:11.5px;outline:none;width:110px}
+  #ledger .econadd{margin:6px 0 2px;font-size:11px;color:#8fe3ff;cursor:pointer;user-select:none}
+  #ledger .savebtn{margin-top:10px;width:100%;background:rgba(143,227,255,.18);
+    border:1px solid rgba(150,210,255,.35);border-radius:8px;padding:6px;color:#dff0ff;cursor:pointer;font-size:12px}
+  #ledger .econlink{display:block;margin-top:10px;font-size:11.5px;color:#8fe3ff;text-decoration:none}
+  #ledger .allowance{display:flex;gap:8px;align-items:center;margin-top:10px;font-size:12px;color:#bfd9ff}
+  #ledger .allowance input{width:74px;background:rgba(255,255,255,.07);border:1px solid rgba(150,210,255,.25);
+    border-radius:8px;padding:4px 8px;color:#eaf3ff;font-size:12px;outline:none}
+  #ledger .allowance button{background:rgba(143,227,255,.16);border:1px solid rgba(150,210,255,.3);
+    border-radius:8px;padding:4px 12px;color:#dff0ff;cursor:pointer;font-size:12px}
+  #ledger .row{display:flex;justify-content:space-between;font-size:12px;padding:5px 0;
+    border-bottom:1px dashed rgba(143,227,255,.12)}
+  #ledger .row span:last-child{font-variant-numeric:tabular-nums}
+  #ledger .plus{color:#8fe3b0}
+  #ledger .minus{color:#ff9e9e}
+  #ledger .close{margin-top:12px;width:100%;background:rgba(255,255,255,.07);border:1px solid rgba(150,210,255,.24);
+    border-radius:9px;padding:6px;color:#cfe3ff;cursor:pointer;font-size:12px}
+  #panel #toggle{position:absolute;right:10px;top:10px;width:22px;height:22px;border-radius:8px;
+    border:1px solid rgba(150,210,255,.28);background:rgba(255,255,255,.06);color:#bcd6ff;cursor:pointer;font-size:12px}
+  #panel.collapsed .stat:nth-child(n+4), #panel.collapsed #wishline{display:none}
+
+  .corner{position:fixed;z-index:5;background:var(--glass);border:1px solid var(--line);border-radius:14px;
+    padding:9px 12px;backdrop-filter:blur(12px);box-shadow:0 12px 32px rgba(0,0,0,.45);font-size:12px;line-height:1.55}
+  #tr{top:14px;right:16px;text-align:right;min-width:140px}
+  #bl{bottom:18px;left:376px;max-width:260px}
+  .name{font-size:13.5px;font-weight:600}
+  .dim{color:var(--dim)}
+
+  /* 半透明小气泡 */
+  #books{position:fixed;inset:0;z-index:22;display:none;place-items:center;background:rgba(4,7,16,.66)}
+  #books.show{display:grid}
+  #books .box{width:min(380px,90vw);max-height:64vh;overflow:auto;background:rgba(14,19,36,.97);
+    border:1px solid rgba(150,210,255,.28);border-radius:16px;padding:16px 18px;
+    box-shadow:0 24px 60px rgba(0,0,0,.6)}
+  #books h3{font-size:15px;margin-bottom:4px}
+  #books .sub{font-size:11px;color:#9fb3d3;margin-bottom:10px}
+  #books .bk{font-size:12.5px;color:#dbe9ff;padding:6px 2px;border-bottom:1px dashed rgba(143,227,255,.14)}
+  #books .bk span{color:#6d86a6;font-size:11px;margin-right:8px}
+  #books .bk em{float:right;font-style:normal;color:#7f97b8;font-size:10.5px}
+  #books .close{margin-top:12px;width:100%;background:rgba(255,255,255,.07);
+    border:1px solid rgba(150,210,255,.24);border-radius:9px;padding:6px;color:#cfe3ff;cursor:pointer;font-size:12px}
+  #loglink,#runtimelink{position:fixed;bottom:16px;z-index:11;width:38px;height:38px;
+    display:grid;place-items:center;border-radius:50%;text-decoration:none;font-size:16px;
+    background:rgba(14,19,36,.82);border:1px solid rgba(150,210,255,.28);
+    box-shadow:0 8px 22px rgba(0,0,0,.45);transition:transform .15s,background .15s}
+  #loglink{right:200px}
+  #runtimelink{right:154px}
+  #loglink:hover,#runtimelink:hover{transform:translateY(-2px);background:rgba(30,44,72,.92)}
+  #starlink{position:fixed;right:108px;bottom:16px;z-index:11;width:38px;height:38px;
+    display:grid;place-items:center;border-radius:50%;text-decoration:none;font-size:17px;
+    color:#dff0ff;background:rgba(14,19,36,.82);border:1px solid rgba(150,210,255,.28);
+    box-shadow:0 8px 22px rgba(0,0,0,.45);transition:transform .15s,background .15s}
+  #starlink:hover{transform:translateY(-2px);background:rgba(30,44,72,.92)}
+  #homelink{position:fixed;right:62px;bottom:16px;z-index:11;width:38px;height:38px;
+    display:grid;place-items:center;border-radius:50%;text-decoration:none;font-size:17px;
+    color:#cfe3ff;background:rgba(14,19,36,.82);border:1px solid rgba(150,210,255,.28);
+    box-shadow:0 8px 22px rgba(0,0,0,.45);transition:transform .15s,background .15s}
+  #homelink:hover{transform:translateY(-2px);background:rgba(30,44,72,.92)}
+  #consolelink{position:fixed;right:16px;bottom:16px;z-index:11;width:38px;height:38px;
+    display:grid;place-items:center;border-radius:50%;text-decoration:none;font-size:17px;
+    color:#cfe3ff;background:rgba(14,19,36,.82);border:1px solid rgba(150,210,255,.28);
+    box-shadow:0 8px 22px rgba(0,0,0,.45);transition:transform .15s,background .15s}
+  #consolelink:hover{transform:translateY(-2px);background:rgba(30,44,72,.92)}
+  #objname{position:fixed;z-index:10;transform:translate(-50%,-100%);pointer-events:none;
+    font-size:11.5px;color:rgba(230,242,255,.92);background:rgba(10,16,30,.45);
+    border:1px solid rgba(150,210,255,.22);border-radius:8px;padding:2px 8px;
+    opacity:0;transition:opacity .2s;white-space:nowrap;letter-spacing:.5px}
+  #objname.show{opacity:1}
+  #wardtext{position:fixed;z-index:9;left:50%;top:34%;transform:translate(-50%,-8px);
+    background:rgba(255,255,255,.52);color:#1b2540;border-radius:12px;padding:7px 13px;
+    font-size:13px;box-shadow:0 12px 28px rgba(0,0,0,.4);opacity:0;transition:opacity .25s,transform .25s;
+    pointer-events:none;white-space:nowrap}
+  #wardtext.show{opacity:1;transform:translate(-50%,0)}
+  #away{position:fixed;inset:0;display:none;z-index:4;pointer-events:none;
+    font-family:"Segoe UI","PingFang SC",sans-serif}
+  #away.show{display:flex;align-items:center;justify-content:center}
+  #away .inner{display:flex;flex-direction:column;align-items:center;gap:10px;
+    background:rgba(8,12,24,.42);padding:22px 34px;border-radius:18px;
+    border:1px solid rgba(150,210,255,.16);backdrop-filter:blur(3px)}
+  #away .t{font-size:34px;font-weight:800;letter-spacing:8px;color:#f2f8ff;
+    text-shadow:0 0 22px rgba(120,190,255,.6),0 3px 0 rgba(0,0,0,.55)}
+  #away .p{font-size:20px;color:#cfe6ff;letter-spacing:3px}
+  #away .e{font-size:16px;color:#ffd28c;letter-spacing:1px}
+  #bubble{position:fixed;z-index:7;max-width:232px;background:rgba(255,255,255,.72);color:#1b2540;
+    border-radius:12px;padding:7px 10px;font-size:12px;line-height:1.45;
+    box-shadow:0 10px 24px rgba(0,0,0,.35);backdrop-filter:blur(6px);
+    opacity:0;transition:opacity .3s,left .7s,bottom .7s}
+  #bubble.show{opacity:1}
+  #bubble::after{content:"";position:absolute;left:50%;margin-left:-7px;bottom:-7px;
+    border:7px solid transparent;border-top-color:rgba(255,255,255,.72)}
+  #phone{position:fixed;z-index:8;right:20px;top:92px;width:150px;opacity:0;transform:translateY(8px);
+    transition:opacity .3s,transform .3s;pointer-events:none}
+  #phone.show{opacity:1;transform:translateY(0)}
+  #phone .screen{background:rgba(10,18,32,.86);border:1px solid #3d5c8c;border-radius:14px;padding:8px;
+    font-size:10.5px;line-height:1.5;color:#cfe3ff;box-shadow:0 14px 32px rgba(0,0,0,.6);backdrop-filter:blur(8px)}
+  #phone .head{display:flex;justify-content:space-between;color:#7fa6d6;font-size:9px;margin-bottom:4px}
+</style>
+</head>
+<body>
+<div id="wrap"><canvas id="c" width="536" height="270"></canvas></div>
+<div id="away"><div class="inner">
+  <div class="t">她出门了</div>
+  <div class="p" id="awayplace">—</div>
+  <div class="e" id="awayeta"></div>
+</div></div>
+<div id="bubble"></div>
+<div id="wardtext"></div>
+<div id="objname"></div>
+<div id="books"><div class="box">
+  <h3>她的书架</h3>
+  <div class="sub" id="bookssub">—</div>
+  <div id="booklist"></div>
+  <button class="close" id="booksclose">关闭</button>
+</div></div>
+<div id="phone"><div class="screen"><div class="head"><span>QQ</span><span>洛雪</span></div><div id="phoneline">…</div></div></div>
+
+<div class="corner" id="weatherbox">
+  <div class="wrow"><span id="wicon">☀</span><span id="wkind">晴</span><span id="wtemp">24℃</span></div>
+  <div class="wclock" id="wclock">--:--</div>
+  <div class="dim" id="wdate">--月--日 周- · --天</div>
+  <div class="dim" id="wphase">白天</div>
+</div>
+<div id="panel">
+  <div class="top">
+    <img class="face" src="assets/sprite_idle.png" alt="洛雪">
+    <div class="who">
+      <div class="nm">洛雪 <span id="online" style="font-size:10.5px;color:var(--cyan)">在线</span></div>
+      <div class="sub" id="clock">--:-- · 北京时间</div>
+    </div>
+  </div>
+  <div class="moodline" id="mood">心情加载中…</div>
+  <div class="moodtags" id="moodtags"></div>
+  <div class="tagbox" id="tags"></div>
+  <div id="stats"></div>
+  <div id="wishline" class="wish"></div>
+  <div class="money">
+    <div class="mrow"><span>存款</span><b id="balance">¥0</b></div>
+    <div class="dim" id="goallabel">攒钱买：—</div>
+    <div class="bar" style="margin-top:4px"><i id="goalfill" style="background:linear-gradient(90deg,#ffd36f,#ff9d5c);width:0%"></i></div>
+    <div class="dim" id="goalsaved">0 / 0</div>
+    <button id="ledgerbtn">收支明细</button>
+  </div>
+  <button id="toggle" title="展开/收起">▾</button>
+</div>
+
+<div class="corner" id="tr">
+  <div class="name" id="phase">夜晚</div>
+  <div class="dim" id="msgs">今天 0 条</div>
+</div>
+<div id="ledger"><div class="box">
+  <h3>洛雪的钱包</h3>
+  <div class="sub" id="ledgersub">—</div>
+  <a class="econlink" href="/console.html#econ">资金出入设置 → 全属性面板</a>
+  <div class="sub" style="margin-top:10px">收支记录</div>
+  <div id="ledgerrows"></div>
+  <button class="close" id="ledgerclose">关闭</button>
+</div></div>
+
+<a id="loglink" href="/log.html" title="她的日志">📜</a>
+<a id="runtimelink" href="/runtime.html" title="运行日志">🖥️</a>
+<a id="starlink" href="/memories.html" title="记忆星图">✦</a>
+<a id="homelink" href="/room3d/home.html" title="3D 家">🏠</a>
+<a id="consolelink" href="/console.html" title="全属性面板">⚙</a>
+
+<div class="corner" id="bl">
+  <div class="dim">现在</div>
+  <div class="name" id="activity">—</div>
+  <div class="dim" id="recent" style="margin-top:3px">—</div>
+</div>
+
+
+<script>
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+ctx.imageSmoothingEnabled = false;
+const W = 536, H = 270, FLOOR_Y = 200;
+
+const img = {};
+['idle','walk1','walk2','sit','type','draw','read','lie','phone','eat','side1','side2'].forEach(k => {
+  const i = new Image(); i.src = 'assets/sprite_' + k + '.png'; i.onload = () => (img[k] = i);
+});
+
+const SPOTS = { bed: 129, sofa: 235, desk: 374, window: 250, center: 235 };
+let dayTint = 0.1, rainKind = '', daylight = 0, lights = {}, sleepMode = 'awake', clockStr = '';
+const ustate = { umbrella: { rain: true, sun: true }, wet: false };
+let props = [];
+const state = { x: 250, target: 250, pose: 'idle', spot: 'center', walking: false, facing: 1,
+                wardrobe: { open: false, lastText: 0 } };
+
+const STAT_ORDER = [
+  ['体力', 'f1'], ['心情', 'f2'], ['亲密', 'f3'], ['信任', 'f4'],
+  ['兴致', 'f5'], ['睡意', 'f6'], ['饥饿', 'f7']
+];
+let statBars = {};
+
+function px(x, y, w, h, color) { ctx.fillStyle = color; ctx.fillRect(x|0, y|0, w|0, h|0); }
+
+function drawWindowScene(t) {
+  const wx = 68, wy = 38, ww = 92, wh = 74;
+  // 天色：白天亮蓝，黄昏橙，夜里深蓝
+  const hue = daylight;
+  const skyTop = hue > 0.5 ? '#3f7fd6' : hue > 0.15 ? '#3b4a86' : '#0b1530';
+  const skyBottom = hue > 0.5 ? '#9dd0ff' : hue > 0.15 ? '#e08a5a' : '#132148';
+  const grad = ctx.createLinearGradient(wx, wy, wx, wy + wh);
+  grad.addColorStop(0, skyTop); grad.addColorStop(1, skyBottom);
+  ctx.fillStyle = grad; ctx.fillRect(wx, wy, ww, wh);
+
+  // 太阳 / 月亮
+  const phase = (t * 0.004) % 1;
+  if (daylight > 0.12) {
+    const sx = wx + 12 + ((1 - Math.min(1, Math.max(0, daylight))) * 40);
+    ctx.fillStyle = '#ffe9a8';
+    ctx.fillRect(sx | 0, (wy + 14) | 0, 8, 8);
+    ctx.fillStyle = 'rgba(255,233,168,.22)';
+    ctx.fillRect((sx - 4) | 0, (wy + 10) | 0, 16, 16);
+  } else {
+    ctx.fillStyle = '#e8f1ff';
+    ctx.fillRect((wx + 62) | 0, (wy + 12) | 0, 7, 7);
+    ctx.fillStyle = 'rgba(232,241,255,.18)';
+    ctx.fillRect((wx + 58) | 0, (wy + 8) | 0, 15, 15);
+  }
+
+  // 星星只在夜里
+  if (daylight < 0.2) {
+    for (let i = 0; i < 14; i++) {
+      const sx2 = wx + ((i * 41) % ww), sy2 = wy + ((i * 27) % wh);
+      if ((i + Math.floor(t * 0.6)) % 5 === 0) px(sx2, sy2, 1, 1, '#dce9ff');
+    }
+  }
+
+  // 窗外天气
+  if (rainKind) {
+    const n = rainKind === 'storm' ? 46 : 22;
+    for (let i = 0; i < n; i++) {
+      const x = wx + ((i * 17 + t * (rainKind === 'storm' ? 120 : 70)) % ww);
+      const y = wy + ((i * 13 + t * (rainKind === 'storm' ? 210 : 140)) % wh);
+      ctx.fillStyle = rainKind === 'storm' ? 'rgba(200,220,255,.75)' : 'rgba(200,220,255,.5)';
+      ctx.fillRect(x | 0, y | 0, 1, rainKind === 'storm' ? 5 : 3);
+    }
+    if (rainKind === 'storm' && Math.sin(t * 7) > 0.985) {
+      ctx.fillStyle = 'rgba(255,255,255,.5)';
+      ctx.fillRect(wx, wy, ww, wh);
+    }
+  }
+  // 窗框（四边闭合）
+  px(wx - 4, wy - 4, ww + 8, 4, '#3a2f5c');
+  px(wx - 4, wy + wh, ww + 8, 4, '#3a2f5c');
+  px(wx - 4, wy - 4, 4, wh + 8, '#3a2f5c');
+  px(wx + ww, wy - 4, 4, wh + 8, '#3a2f5c');
+  px(wx + (ww >> 1) - 1, wy, 2, wh, '#3a2f5c');
+  px(wx, wy + (wh >> 1), ww, 2, '#3a2f5c');
+  // 窗帘
+  px(wx - 12, wy - 6, 9, wh + 14, '#4b2f63');
+  px(wx - 12, wy - 6, 3, wh + 14, '#5d3b78');
+  px(wx + ww + 3, wy - 6, 9, wh + 14, '#4b2f63');
+}
+
+function drawLights(t) {
+  const ceiling = !!lights.ceiling, desk = !!lights.desk, bed = !!lights.bed;
+
+  if (ceiling) {
+    // 大灯：整体提亮 + 顶部光晕
+    const g = ctx.createLinearGradient(0, 0, 0, FLOOR_Y);
+    g.addColorStop(0, 'rgba(255,226,170,.22)');
+    g.addColorStop(1, 'rgba(255,226,170,.05)');
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, FLOOR_Y);
+    px(236, 22, 10, 4, '#ffe7b0');
+    px(238, 26, 6, 2, 'rgba(255,231,176,.6)');
+  }
+  if (desk) {
+    const d = ctx.createRadialGradient(374, 150, 6, 374, 150, 84);
+    d.addColorStop(0, 'rgba(120,180,255,.20)');
+    d.addColorStop(1, 'rgba(120,180,255,0)');
+    ctx.fillStyle = d; ctx.fillRect(286, 82, 190, 130);
+    px(368, 148, 12, 2, '#bfe0ff');
+  }
+  if (bed) {
+    const b = ctx.createRadialGradient(92, 160, 4, 92, 160, 60);
+    b.addColorStop(0, 'rgba(255,208,140,.22)');
+    b.addColorStop(1, 'rgba(255,208,140,0)');
+    ctx.fillStyle = b; ctx.fillRect(36, 110, 130, 100);
+    px(76, 166, 6, 3, '#ffd28c');
+  }
+
+  // 白天阳光斜射进屋内
+  if (daylight > 0.35 && !rainKind) {
+    const strength = Math.min(0.22, (daylight - 0.35) * 0.35);
+    ctx.fillStyle = 'rgba(255,236,180,' + strength + ')';
+    ctx.beginPath();
+    ctx.moveTo(34, 40); ctx.lineTo(126, 40);
+    ctx.lineTo(250, FLOOR_Y); ctx.lineTo(120, FLOOR_Y);
+    ctx.closePath(); ctx.fill();
+    ctx.fillStyle = 'rgba(255,240,200,' + (strength * 0.6) + ')';
+    ctx.fillRect(120, FLOOR_Y - 6, 130, 6);
+  }
+}
+
+function drawProps(t) {
+  const slots = { yogamat: 236, dumbbell: 210, cushion: 160, catstand: 424, fishbowl: 452, guitar: 300 };
+  props.forEach(kind => {
+    const x = slots[kind] ?? 240;
+    if (kind === 'yogamat') { px(x - 26, 214, 52, 5, '#7a5aa8'); px(x - 22, 215, 44, 3, '#9a76c8'); }
+    if (kind === 'dumbbell') { px(x - 8, 208, 16, 3, '#9aa4b8'); px(x - 11, 205, 5, 9, '#6c7488'); px(x + 6, 205, 5, 9, '#6c7488'); }
+    if (kind === 'cushion') { px(x - 10, 206, 20, 8, '#ff9ed2'); px(x - 7, 208, 14, 4, '#ffc2e0'); }
+    if (kind === 'catstand') { px(x, 176, 4, 36, '#6b5540'); px(x - 10, 200, 24, 4, '#8a6f52'); px(x - 8, 182, 20, 4, '#8a6f52'); }
+    if (kind === 'fishbowl') { px(x, 208, 16, 10, 'rgba(120,200,240,.35)'); px(x, 208, 16, 2, '#89d8ff'); }
+    if (kind === 'guitar') { px(x, 190, 6, 22, '#a8743f'); px(x - 4, 208, 14, 8, '#c98a4b'); }
+  });
+}
+
+function drawRoom(t) {
+  // —— 墙 ——
+  px(0, 0, W, FLOOR_Y, '#241d3d');
+  for (let y = 10; y < FLOOR_Y; y += 26)
+    for (let x = (y % 52 === 10 ? 0 : 26); x < W; x += 52) px(x, y, 2, 2, '#2e2550');
+  // 墙裙
+  px(0, FLOOR_Y - 8, W, 8, '#2b2247');
+  px(0, FLOOR_Y - 9, W, 1, '#3d3060');
+
+  // —— 地板：木条 + 交错拼缝 ——
+  px(0, FLOOR_Y, W, H - FLOOR_Y, '#5b3a2c');
+  for (let y = FLOOR_Y; y < H; y += 11) px(0, y, W, 1, '#482e23');
+  for (let x = 0; x < W; x += 36)
+    px(x, FLOOR_Y + (((x / 36) | 0) % 2 ? 0 : 11), 1, 11, '#482e23');
+  px(0, FLOOR_Y + 24, W, 1, '#3e271e');
+
+  // —— 顶部灯带 ——
+  const glow = 0.55 + Math.sin(t * 1.3) * 0.2;
+  px(0, 10, W, 3, 'rgba(255,79,163,' + glow + ')');
+  px(0, 14, W, 1, 'rgba(255,79,163,' + (glow * 0.4) + ')');
+  // 串灯
+  for (let i = 0; i < 14; i++) {
+    const lx = 10 + i * 34, ly = 24 + Math.sin(i * 0.9) * 3;
+    px(lx, ly, 1, 1, 'rgba(255,220,150,' + (0.45 + 0.3 * Math.sin(t * 2 + i)) + ')');
+  }
+
+  // —— 墙上的挂钟 ——
+  px(268, 30, 18, 18, '#3a2f5c');
+  px(270, 32, 14, 14, '#efe8ff');
+  const sec = (t % 60) * 6 * Math.PI / 180;
+  px(277 + Math.round(Math.sin(sec) * 5), 39 - Math.round(Math.cos(sec) * 5), 1, 1, '#c0392b');
+  px(277, 39, 1, 4, '#333');
+
+  // —— 挂画（两张）——
+  px(300, 56, 30, 22, '#3a2f5c');
+  px(303, 59, 24, 16, '#1a2a4a');
+  px(307, 66, 16, 6, '#4b7bd0');
+  px(340, 62, 22, 16, '#3a2f5c');
+  px(343, 65, 16, 10, '#2a4a3a');
+
+  // —— 隔板 + 小摆件 ——
+  px(180, 84, 62, 3, '#5a4670');
+  px(184, 74, 6, 10, '#a85a7f');
+  px(194, 77, 5, 7, '#5aa88a');
+  px(204, 72, 8, 12, '#7f5aa8');
+  px(216, 78, 4, 6, '#a8945a');
+  px(226, 75, 6, 9, '#3a6ea5');
+
+  // —— 书架 ——
+  px(424, 96, 40, 92, '#3a2c3f');
+  px(424, 96, 40, 2, '#4e3c56');
+  for (let r = 0; r < 5; r++) {
+    const by = 106 + r * 17;
+    px(426, by, 36, 1, '#4e3c56');
+    for (let b = 0; b < 6; b++) {
+      const c = ['#7f5aa8', '#3a6ea5', '#a85a7f', '#5aa88a', '#a8945a', '#5a6ea8'][(r + b) % 6];
+      const hh = 10 + ((r * 3 + b) % 3);
+      px(428 + b * 6, by - hh, 4, hh, c);
+    }
+  }
+  px(424, 96, 40, 92, 'rgba(0,0,0,0)');
+
+  // —— 床（落地）——
+  px(70, 188, 118, 12, '#2a2438');
+  px(72, 176, 114, 12, '#6b4b8a');
+  px(76, 168, 32, 9, '#e8e2f5');
+  px(110, 178, 74, 8, '#7a5aa8');
+  px(70, 172, 6, 28, '#3a2f52');
+  px(182, 172, 6, 28, '#3a2f52');
+  px(74, 196, 110, 2, 'rgba(0,0,0,.28)');
+  // 床边拖鞋
+  px(192, 194, 7, 4, '#c98ab0');
+  px(200, 196, 7, 4, '#c98ab0');
+
+  // —— 书桌 + 双屏 ——
+  px(318, 158, 112, 6, '#3a2c3f');
+  px(322, 164, 6, 38, '#241c2c');
+  px(420, 164, 6, 38, '#241c2c');
+  const screen = 0.5 + Math.sin(t * 2.2) * 0.14;
+  px(340, 124, 34, 26, '#1b2440');
+  px(343, 127, 28, 20, 'rgba(79,127,255,' + screen + ')');
+  px(388, 124, 26, 26, '#1b2440');
+  px(391, 127, 20, 20, 'rgba(255,158,210,' + (screen * 0.8) + ')');
+  px(352, 150, 8, 8, '#2a2338');
+  px(396, 150, 8, 8, '#2a2338');
+  px(344, 156, 44, 3, '#22283c');
+  px(392, 156, 6, 3, '#22283c');
+  // 杯子 / 纸 / 耳机
+  px(330, 152, 6, 5, '#dfe8f5');
+  px(404, 154, 10, 6, '#e8e2d0');
+  px(414, 152, 5, 6, '#9aa4b8');
+  // 台灯
+  px(424, 148, 3, 10, '#4a4058');
+  px(420, 144, 10, 4, '#ffe0a8');
+  const g = ctx.createRadialGradient(374, 136, 4, 374, 136, 92);
+  g.addColorStop(0, 'rgba(79,127,255,' + (0.14 + screen * 0.12) + ')');
+  g.addColorStop(1, 'rgba(79,127,255,0)');
+  ctx.fillStyle = g; ctx.fillRect(280, 76, 200, 140);
+
+  // —— 椅子 ——
+  px(296, 184, 26, 6, '#201a2c');
+  px(302, 154, 16, 32, '#2a2338');
+  px(298, 196, 22, 4, '#1b1626');
+
+  // —— 沙发 ——
+  px(196, 184, 78, 12, '#33263f');
+  px(196, 166, 78, 16, '#2b2036');
+  px(192, 176, 8, 22, '#241a30');
+  px(270, 176, 8, 22, '#241a30');
+  px(200, 176, 70, 8, '#3a2c48');
+  // 靠枕
+  px(204, 172, 12, 8, '#8a5aa8');
+  px(254, 172, 12, 8, '#a85a7f');
+
+  // —— 地毯 ——
+  px(206, 208, 150, 12, '#3a2140');
+  px(216, 212, 130, 6, '#452a4d');
+  for (let i = 0; i < 6; i++) px(200 + i * 20, 214, 8, 1, '#573463');
+
+  // —— 绿植 ——
+  px(268, 158, 6, 10, '#3b2a20');
+  px(260, 144, 20, 14, '#2f7a4f');
+  px(265, 137, 10, 9, '#3a9160');
+
+  // —— 鱼缸 ——
+  px(456, 176, 20, 14, 'rgba(80,180,220,.35)');
+  px(456, 176, 20, 2, '#6fd0f0');
+  px(462, 184, 3, 2, '#ffd166');
+
+  // —— 猫 ——
+  px(276, 194, 14, 8, '#c9c4d8');
+  px(288, 192, 6, 6, '#c9c4d8');
+  px(278, 190, 3, 5, '#c9c4d8');
+  px(270, 196, 7, 2, '#c9c4d8');
+
+  // —— 落地灯 ——
+  px(462, 160, 3, 40, '#4a4058');
+  const lamp = ctx.createRadialGradient(463, 156, 3, 463, 156, 64);
+  lamp.addColorStop(0, 'rgba(255,190,120,0.20)');
+  lamp.addColorStop(1, 'rgba(255,190,120,0)');
+  ctx.fillStyle = lamp; ctx.fillRect(400, 96, 124, 120);
+  px(456, 150, 16, 8, '#ffcf8a');
+
+  // —— 衣柜（点击开合）——
+  const wd = { x: 4, y: 106, w: 52, h: 94 };
+  px(wd.x, wd.y, wd.w, wd.h, '#4a3550');
+  px(wd.x + 2, wd.y + 2, wd.w - 4, wd.h - 4, '#5c4466');
+  px(wd.x - 2, wd.y - 4, wd.w + 4, 5, '#6a4f76');       // 顶盖
+  px(wd.x, 194, wd.w, 6, '#3a2a44');                      // 底座
+  if (!state.wardrobe.open) {
+    // 关着：两扇门 + 把手（按 52 宽精确分配）
+    const inner = wd.w - 8;            // 44
+    const door = (inner - 2) / 2;      // 21
+    px(wd.x + 4, wd.y + 6, door, wd.h - 14, '#6b5078');
+    px(wd.x + 4 + door + 2, wd.y + 6, door, wd.h - 14, '#6b5078');
+    px(wd.x + 4 + door - 3, wd.y + 44, 3, 8, '#e0c98a');
+    px(wd.x + 4 + door + 5, wd.y + 44, 3, 8, '#e0c98a');
+    px(wd.x + 4, wd.y + 6, door, 1, '#7d5f8c');
+    px(wd.x + 6 + door, wd.y + 6, door, 1, '#7d5f8c');
+  } else {
+    // 打开：里面挂满女仆装
+    px(wd.x + 4, wd.y + 6, wd.w - 8, wd.h - 14, '#2c2036');
+    px(wd.x + 6, wd.y + 12, wd.w - 12, 2, '#8a6a3f');     // 挂衣杆
+    for (let i = 0; i < 4; i++) {
+      const cx = wd.x + 12 + i * 11;
+      px(cx, wd.y + 16, 8, 40, i % 2 ? '#e8eef8' : '#2f4d86');   // 衣身
+      px(cx, wd.y + 16, 8, 6, '#f2f6ff');                          // 领口/围裙
+      px(cx + 1, wd.y + 56, 6, 14, i % 2 ? '#dfe6f2' : '#263f6e'); // 裙摆
+    }
+    // 打开的门板（向外）
+    px(wd.x - 12, wd.y + 6, 10, wd.h - 14, '#6b5078');
+    px(wd.x + wd.w + 2, wd.y + 6, 10, wd.h - 14, '#6b5078');
+  }
+
+  // —— 门口的伞架 ——
+  px(466, 186, 24, 4, '#3a2f52');                 // 伞架底座
+  px(472, 170, 2, 16, '#4a3f60');
+  px(484, 170, 2, 16, '#4a3f60');
+  if (ustate.umbrella.rain) {
+    // 长柄雨伞：伞面在头顶高度，杆一路到地
+    px(467, 124, 3, 62, '#2f4d86');
+    px(461, 118, 15, 6, '#3a63a8');
+    px(464, 113, 9, 5, '#4a78c0');
+    px(466, 186, 5, 2, '#2f4d86');
+    px(466, 128, 5, 1, '#263f6e');
+  }
+  if (ustate.umbrella.sun) {
+    // 短柄太阳伞：只到腰高，浅粉
+    px(480, 146, 2, 40, '#c99ab0');
+    px(475, 141, 12, 5, '#e8b7cd');
+    px(478, 138, 6, 3, '#f2c9db');
+    px(479, 186, 4, 2, '#c99ab0');
+  }
+
+  // —— 门（右侧）——
+  px(492, 108, 42, 92, '#31264a');            // 门框
+  px(496, 112, 34, 88, '#4a3a63');            // 门板
+  px(500, 118, 26, 30, '#3f3157');            // 门板上格
+  px(500, 154, 26, 38, '#3f3157');            // 门板下格
+  px(502, 160, 22, 2, '#584a76');
+  px(502, 168, 22, 2, '#584a76');
+  px(524, 152, 3, 6, '#e0c98a');              // 门把手
+  px(496, 112, 3, 88, '#5d4b7c');             // 高光
+  px(488, 198, 50, 4, '#3a2f52');             // 门槛
+  px(500, 202, 26, 5, '#6b5a45');             // 门口的垫子
+  px(504, 204, 18, 1, '#8a7659');
+
+  // —— 脏衣篮 ——
+  px(58, 148, 12, 14, '#6b5a7a');
+  px(58, 148, 12, 2, '#8a76a0');
+
+  drawProps(t);
+
+  // 暗角，让画面更有层次
+  const vg = ctx.createRadialGradient(W / 2, FLOOR_Y * 0.6, H * 0.25, W / 2, FLOOR_Y * 0.6, W * 0.72);
+  vg.addColorStop(0, 'rgba(0,0,0,0)');
+  vg.addColorStop(1, 'rgba(0,0,0,.38)');
+  ctx.fillStyle = vg;
+  ctx.fillRect(0, 0, W, H);
+
+  // 地板反光
+  const refl = ctx.createLinearGradient(0, FLOOR_Y, 0, H);
+  refl.addColorStop(0, 'rgba(180,200,255,.06)');
+  refl.addColorStop(1, 'rgba(180,200,255,0)');
+  ctx.fillStyle = refl;
+  ctx.fillRect(0, FLOOR_Y, W, H - FLOOR_Y);
+
+  // —— 昼夜色调 ——
+  if (dayTint > 0) {
+    ctx.fillStyle = 'rgba(12,18,44,' + dayTint + ')';
+    ctx.fillRect(0, 0, W, H);
+  }
+
+  drawWindowScene(t);
+  drawLights(t);
+
+  if (sleepMode === 'asleep' || sleepMode === 'nap') {
+    ctx.fillStyle = 'rgba(4,7,18,.55)';
+    ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = 'rgba(220,235,255,.8)';
+    ctx.font = '9px monospace';
+    for (let i = 0; i < 3; i++) {
+      const yy = 150 - ((t * 12 + i * 14) % 42);
+      ctx.fillText('z', (state.x + 16 + i * 6) | 0, yy | 0);
+    }
+  }
+}
+
+function drawGirl(t) {
+  if (state.away) return;
+  let key = state.pose;
+  if (state.walking) key = (Math.floor(t * 7) % 2) ? 'side1' : 'side2';
+  const sprite = img[key] || img.idle;
+  if (!sprite) return;
+
+  const seated = ['type','draw','read','eat','sit'].includes(key);
+  const lying = key === 'lie';
+  const h = lying ? 58 : seated ? 84 : 100;
+  const w = sprite.width * (h / sprite.height);
+
+  // 床面 / 坐垫 / 椅面的高度：躺着要躺到床上，坐着要坐在坐垫上
+  const BED_TOP = 176, SOFA_TOP = 184, CHAIR_TOP = 176;
+  let groundY = FLOOR_Y + 4;
+  if (lying) {
+    groundY = (state.spot === 'bed') ? BED_TOP + 2 : FLOOR_Y + 8;
+  } else if (seated) {
+    if (state.spot === 'bed') groundY = BED_TOP;
+    else if (state.spot === 'sofa') groundY = SOFA_TOP;
+    else if (state.spot === 'desk') groundY = CHAIR_TOP;
+  }
+  const bob = state.walking ? Math.abs(Math.sin(t * 12)) * 2 : Math.sin(t * 1.5) * 0.7;
+
+  const drawX = (lying && state.spot === 'bed') ? SPOTS.bed : state.x;
+  if (lying && state.spot === 'bed') {
+    // 躺床时把整体压扁一点，像陷进被子里
+    ctx.save();
+    ctx.translate(drawX, groundY);
+    ctx.scale(1.12, 0.62);
+    ctx.drawImage(sprite, (-w / 2) | 0, -h | 0, w | 0, h | 0);
+    ctx.restore();
+    return;
+  }
+  ctx.fillStyle = 'rgba(0,0,0,.35)';
+  ctx.beginPath(); ctx.ellipse(state.x, groundY + 2, w * 0.33, 3.6, 0, 0, Math.PI * 2); ctx.fill();
+
+  // 朝向：向左走时水平翻转
+  if (state.walking && state.facing < 0) {
+    ctx.save();
+    ctx.translate(state.x, 0);
+    ctx.scale(-1, 1);
+    ctx.drawImage(sprite, (-w / 2) | 0, (groundY - h + bob) | 0, w | 0, h | 0);
+    ctx.restore();
+    return;
+  }
+  if (state.facing < 0) {
+    ctx.save();
+    ctx.translate(state.x, 0);
+    ctx.scale(-1, 1);
+    ctx.drawImage(sprite, (-w / 2) | 0, (groundY - h + bob) | 0, w | 0, h | 0);
+    ctx.restore();
+  } else {
+    ctx.drawImage(sprite, (state.x - w / 2) | 0, (groundY - h + bob) | 0, w | 0, h | 0);
+  }
+}
+
+function loop(now) {
+  const t = now / 1000;
+  const dx = state.target - state.x;
+  if (Math.abs(dx) > 2) {
+    state.facing = dx > 0 ? 1 : -1;
+    state.x += Math.sign(dx) * 1.1;
+    state.walking = true;
+  } else state.walking = false;
+  ctx.clearRect(0, 0, W, H);
+  drawRoom(t); drawGirl(t);
+  {
+    const box = document.getElementById('away');
+    if (state.away) {
+      box.classList.add('show');
+      document.getElementById('awayplace').textContent = state.awayLabel || '';
+      document.getElementById('awayeta').textContent =
+        state.awayRemain > 0 ? ('大概 ' + state.awayRemain + ' 分钟后回来') : '';
+      // 出门时把房间压暗一点
+      ctx.fillStyle = 'rgba(6,9,20,.42)';
+      ctx.fillRect(0, 0, W, H);
+    } else {
+      box.classList.remove('show');
+    }
+  }
+  for (let i = 0; i < 10; i++) {
+    const x = (i * 67 + t * 5) % W, y = 70 + ((i * 41 + t * 8) % 130);
+    ctx.fillStyle = 'rgba(180,210,255,' + (0.05 + 0.04 * Math.sin(t + i)) + ')';
+    ctx.fillRect(x | 0, y | 0, 1, 1);
+  }
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+
+// ── HUD ─────────────────────────────
+function buildStats() {
+  const box = document.getElementById('stats');
+  box.innerHTML = '';
+  statBars = {};
+  STAT_ORDER.forEach(([name, cls]) => {
+    const row = document.createElement('div');
+    row.className = 'stat';
+    row.innerHTML = '<span>' + name + '</span><div class="track"><div class="fill ' + cls +
+      '" style="width:50%"></div></div><span class="val">-</span>';
+    box.appendChild(row);
+    statBars[name] = { fill: row.querySelector('.fill'), val: row.querySelector('.val') };
+  });
+}
+buildStats();
+
+function bubble(text) {
+  const el = document.getElementById('bubble');
+  if (!text) return;
+  el.textContent = text; el.classList.add('show');
+  const px2 = (state.x / W) * innerWidth;
+  el.style.left = Math.max(18, Math.min(innerWidth - 260, px2 - 80)) + 'px';
+  el.style.bottom = '132px';
+  clearTimeout(bubble._t);
+  bubble._t = setTimeout(() => el.classList.remove('show'), 7000);
+}
+function showPhone(text) {
+  document.getElementById('phoneline').textContent = text;
+  const box = document.getElementById('phone');
+  box.classList.add('show');
+  clearTimeout(showPhone._t);
+  showPhone._t = setTimeout(() => box.classList.remove('show'), 6000);
+}
+
+let seen = new Set(), bootstrapped = false;
+function render(s) {
+  if (!s) return;
+  try {
+  // 出门状态优先：任何情况下都不要把"出门了"画成站在房间中间
+  const wasAway = state.away;
+  state.away = !!s.away || /出门|外出了/.test(s.activity || '');
+  if (wasAway && !state.away) {
+    // 刚进门：从门口走进来
+    state.x = 508; state.facing = -1;
+    setTimeout(() => { state.target = SPOTS[s.spot] ?? SPOTS.center; }, 120);
+  }
+  state.awayLabel = (s.outing && s.outing.place) ? ('去' + s.outing.place) : (s.activity || '');
+  state.awayRemain = Number(s.awayRemain || 0);
+  document.getElementById('mood').textContent = s.mood || '';
+  const moodtags = document.getElementById('moodtags');
+  if (moodtags) {
+    moodtags.innerHTML = '';
+    (s.moodTags || []).forEach(t => {
+      const d = document.createElement('span'); d.className = 'mtag'; d.textContent = t;
+      moodtags.appendChild(d);
+    });
+  }
+  document.getElementById('activity').textContent = s.activity || '—';
+  document.getElementById('recent').textContent = s.away ? ('出门前 · ' + (s.recent || '—')) : (s.recent || '—');
+  document.getElementById('msgs').textContent = '今天 ' + (s.messagesToday ?? 0) + ' 条';
+  document.getElementById('online').textContent = s.online ? '在线' : '睡着了';
+  const weather = s.weather || {};
+  const icons = {'晴':'☀','多云':'⛅','阴':'☁','小雨':'🌧','大暴雨':'⛈'};
+  document.getElementById('wicon').textContent = icons[weather.kind] || '☀';
+  document.getElementById('wkind').textContent = weather.kind || '晴';
+  document.getElementById('wtemp').textContent = (weather.temp ?? 24) + '℃';
+  document.getElementById('wclock').textContent = s.clock || clockStr || '--:--';
+  document.getElementById('wdate').textContent = (s.date || '') + ' ' + (s.weekday || '') + ' · ' + (s.season || '');
+  const modeName = { asleep: '睡觉中', nap: '午睡中', night_owl: '熬夜中' };
+  document.getElementById('wphase').textContent = modeName[s.sleepMode] || (s.phase || '白天');
+  daylight = Number(s.daylight ?? 0);
+  lights = s.lights || {};
+  sleepMode = s.sleepMode || 'awake';
+  rainKind = weather.kind === '大暴雨' ? 'storm' : weather.kind === '小雨' ? 'rain' : '';
+  document.getElementById('wishline').textContent = s.wish || '';
+  // 昼夜与天气色调
+  const phase = s.phase || '下午';
+  dayTint = phase === '深夜' || phase === '晚上' ? 0.55 : phase === '清晨' ? 0.25 : phase === '上午' ? 0.06 : 0.14;
+  rainKind = weather.kind === '大暴雨' ? 'storm' : weather.kind === '小雨' ? 'rain' : '';
+
+  ustate.umbrella = s.umbrella || { rain: true, sun: true };
+  ustate.wet = !!s.wet;
+  const wetTag = document.getElementById('wettag');
+  if (wetTag) wetTag.style.display = s.wet ? 'inline-block' : 'none';
+
+  const wallet = s.wallet || {};
+  document.getElementById('balance').textContent = '¥' + Number(wallet.balance ?? 0).toFixed(1);
+  document.getElementById('goallabel').textContent = '攒钱买：' + (wallet.goal || '—');
+  window.__eco = s.economy || window.__eco || { incomes: [], shops: [] };
+  const rows = wallet.log || [];
+  const sub = document.getElementById('ledgersub');
+  if (sub) {
+    sub.textContent = '余额 ¥' + Number(wallet.balance ?? 0).toFixed(1) +
+      ' · 目标「' + (wallet.goal || '—') + '」已存 ' + Number(wallet.saved ?? 0).toFixed(1) +
+      ' / ' + Number(wallet.target ?? 0).toFixed(0) + ' 元';
+  }
+  const box = document.getElementById('ledgerrows');
+  if (box) {
+    box.innerHTML = '';
+    const list = rows.slice().reverse();
+    if (!list.length) box.innerHTML = '<div class="row"><span>还没有记录</span><span>—</span></div>';
+    list.forEach(it => {
+      const d = document.createElement('div');
+      d.className = 'row';
+      const amount = Number(it.amount || 0);
+      d.innerHTML = '<span>' + (it.time || '') + ' ' + (it.reason || '') + '</span>' +
+        '<span class="' + (amount >= 0 ? 'plus' : 'minus') + '">' +
+        (amount >= 0 ? '+' : '') + amount.toFixed(1) + '</span>';
+      box.appendChild(d);
+    });
+  }
+  const pct = wallet.target ? Math.min(100, (wallet.saved / wallet.target) * 100) : 0;
+  document.getElementById('goalfill').style.width = pct.toFixed(1) + '%';
+  document.getElementById('goalsaved').textContent =
+    Number(wallet.saved ?? 0).toFixed(1) + ' / ' + Number(wallet.target ?? 0).toFixed(0) + ' 元';
+  const awayline = document.getElementById('awayline');
+  if (awayline) awayline.textContent = s.away ? '（人不在房间里）' : '';
+
+  const extra = [];
+  if (s.qqStatus) extra.push('QQ 状态：' + s.qqStatus);
+  if (s.wet) extra.push('刚淋了点雨');
+  if (s.body) extra.push('身体：' + s.body);
+  if (s.emotion) extra.push('情绪：' + s.emotion);
+  if (s.festival) extra.push('今天是' + s.festival);
+  const tagbox = document.getElementById('tags');
+  if (tagbox) tagbox.innerHTML = '';
+  extra.forEach(t => {
+    const d = document.createElement('span'); d.className = 'tag'; d.textContent = t;
+    if (tagbox) tagbox.appendChild(d);
+  });
+
+  const stats = s.stats || {};
+  const statNodes = document.querySelectorAll('#stats .stat');
+  STAT_ORDER.forEach(([name], index) => {
+    const row = statNodes[index];
+    if (!row) return;
+    const fill = row.querySelector('.fill');
+    const val = row.querySelector('.val');
+    let value = Number(stats[name]);
+    if (!isFinite(value)) value = 50;
+    value = Math.max(0, Math.min(100, value));
+    if (fill) fill.style.width = value + '%';
+    if (val) val.textContent = String(Math.round(value));
+  });
+  const done = document.getElementById('donerecent');
+  if (done) {
+    const rows = (s.log && s.log.length) ? s.log : [];
+    const last = rows.slice(-3).reverse().map(it => (it.time ? it.time + ' ' : '') + (it.text || ''));
+    done.textContent = last.length ? '刚做过：' + last.join(' · ') : '';
+  }
+  let spot = s.spot || 'sofa';
+  if (!SPOTS[spot] || spot === 'center' || spot === 'away') spot = 'sofa';
+  state.spot = spot;
+  state.target = SPOTS[spot];
+  let pose = s.action || 'phone';
+  if (!['idle','walk1','walk2','sit','type','draw','read','lie','phone','eat'].includes(pose)) pose = 'phone';
+  if (pose === 'idle' || pose === 'walk') pose = (state.spot === 'bed' || state.spot === 'sofa') ? 'sit' : 'phone';
+  if (!state.walking) state.pose = pose;
+  if (s.props) props = s.props;
+  } catch (err) { console.warn('render error', err); }
+}
+
+async function poll() {
+  try {
+    const password = sessionStorage.getItem('luoxue_console_pwd') || sessionStorage.getItem('luoxue_brain_pw');
+    const headers = password ? { 'X-Password': password } : {};
+    const r = await fetch('/roomapi/state?t=' + Date.now(), { cache: 'no-store', headers });
+    const data = await r.json();
+    render(data.state);
+    const events = data.events || [];
+    if (!bootstrapped) {
+      // 首屏不重放历史：先把已有的全部标记为已读
+      events.forEach(ev => seen.add(ev.ts + '|' + ev.role + '|' + (ev.text || '').slice(0, 20)));
+      const last = events[events.length - 1];
+      if (last && Date.now() / 1000 - last.ts < 40) {
+        if (last.role === 'owner') showPhone(last.text); else bubble(last.text);
+      }
+      bootstrapped = true;
+      return;
+    }
+    events.forEach(ev => {
+      const key = ev.ts + '|' + ev.role + '|' + (ev.text || '').slice(0, 20);
+      if (seen.has(key)) return;
+      seen.add(key);
+      if (seen.size > 300) seen.clear();
+      if (ev.role === 'owner') { showPhone(ev.text); state.pose = 'phone'; }
+      else bubble(ev.text);
+    });
+  } catch (e) {}
+}
+const WARD = { x: 4, y: 106, w: 52, h: 94 };
+const HOTSPOTS = [
+  { name: '衣柜', x: 2, y: 100, w: 56, h: 100 },
+  { name: '床', x: 68, y: 144, w: 122, h: 58 },
+  { name: '窗', x: 64, y: 34, w: 100, h: 82 },
+  { name: '沙发', x: 190, y: 162, w: 88, h: 34 },
+  { name: '地毯', x: 204, y: 206, w: 154, h: 16 },
+  { name: '绿植', x: 256, y: 132, w: 26, h: 32 },
+  { name: '书桌', x: 316, y: 152, w: 118, h: 24 },
+  { name: '电脑', x: 336, y: 116, w: 84, h: 40 },
+  { name: '椅子', x: 294, y: 124, w: 30, h: 66 },
+  { name: '书架', x: 422, y: 92, w: 46, h: 98 },
+  { name: '猫', x: 268, y: 186, w: 28, h: 16 },
+  { name: '鱼缸', x: 452, y: 174, w: 22, h: 18 },
+  { name: '落地灯', x: 458, y: 148, w: 16, h: 52 },
+  { name: '雨伞', x: 462, y: 120, w: 12, h: 66 },
+  { name: '太阳伞', x: 476, y: 142, w: 12, h: 44 },
+  { name: '伞架', x: 468, y: 182, w: 22, h: 12 },
+  { name: '门', x: 490, y: 104, w: 46, h: 98 },
+  { name: '挂钟', x: 266, y: 28, w: 22, h: 22 },
+  { name: '海报', x: 154, y: 34, w: 44, h: 34 },
+];
+canvas.addEventListener('click', (e) => {
+  const rect = canvas.getBoundingClientRect();
+  const scale = Math.min(rect.width / W, rect.height / H);
+  const offX = (rect.width - W * scale) / 2;
+  const offY = (rect.height - H * scale) / 2;
+  const cx = (e.clientX - rect.left - offX) / scale;
+  const cy = (e.clientY - rect.top - offY) / scale;
+  // 任何物品都能点出名字
+  const matched = HOTSPOTS.filter(o => cx >= o.x && cx <= o.x + o.w && cy >= o.y && cy <= o.y + o.h);
+  matched.sort((a, b) => (a.w * a.h) - (b.w * b.h));
+  const hit = matched[0];
+  if (hit) showObjName(hit.name, e.clientX, e.clientY);
+  if (hit && hit.name === '书架') openBooks();
+  if (cx < WARD.x - 6 || cx > WARD.x + WARD.w + 6 || cy < WARD.y - 6 || cy > WARD.y + WARD.h + 6) return;
+  state.wardrobe.open = !state.wardrobe.open;
+  if (state.wardrobe.open) {
+    const now = Date.now();
+    if (now - state.wardrobe.lastText > 5000) {
+      state.wardrobe.lastText = now;
+      floatWardrobeText();
+    }
+  }
+});
+
+async function openBooks() {
+  const box = document.getElementById('books');
+  const list = document.getElementById('booklist');
+  box.classList.add('show');
+  document.getElementById('bookssub').textContent = '加载中…';
+  list.innerHTML = '';
+  let books = window.__books || [];
+  try {
+    const r = await fetch('/roomapi/state?t=' + Date.now(), { cache: 'no-store' });
+    const data = await r.json();
+    if (data && data.state && Array.isArray(data.state.books)) books = data.state.books;
+  } catch (e) {}
+  window.__books = books;
+  document.getElementById('bookssub').textContent = '一共 ' + books.length + ' 本';
+  if (!books.length) list.innerHTML = '<div class="bk">书架还是空的</div>';
+  books.slice().reverse().forEach((b, i) => {
+    const title = (typeof b === 'string') ? b : (b.title || '');
+    const date = (typeof b === 'string') ? '' : (b.at || '');
+    const store = (typeof b === 'string') ? '' : (b.store || '');
+    const d = document.createElement('div');
+    d.className = 'bk';
+    d.innerHTML = '<span>' + String(books.length - i).padStart(2, '0') + '</span>' + title +
+      '<em>' + [date, store].filter(Boolean).join(' · ') + '</em>';
+    list.appendChild(d);
+  });
+}
+
+document.getElementById('booksclose').onclick = () => document.getElementById('books').classList.remove('show');
+document.getElementById('books').onclick = (e) => {
+  if (e.target.id === 'books') document.getElementById('books').classList.remove('show');
+};
+
+function showObjName(name, px, py) {
+  const el = document.getElementById('objname');
+  if (!el) return;
+  el.textContent = name;
+  el.style.left = px + 'px';
+  el.style.top = (py - 12) + 'px';
+  el.classList.add('show');
+  clearTimeout(showObjName._t);
+  showObjName._t = setTimeout(() => el.classList.remove('show'), 1400);
+}
+
+function floatWardrobeText() {
+  const el = document.getElementById('wardtext');
+  if (!el) return;
+  el.textContent = '我不玩了，我衣柜动了~~';
+  el.classList.add('show');
+  clearTimeout(floatWardrobeText._t);
+  floatWardrobeText._t = setTimeout(() => el.classList.remove('show'), 2000);
+}
+
+function clock() {
+  const n = new Date();
+  document.getElementById('clock').textContent =
+    String(n.getHours()).padStart(2, '0') + ':' + String(n.getMinutes()).padStart(2, '0') + ' · 北京时间';
+}
+let econDraft = null;
+function renderEcon(editable) {
+  const box = document.getElementById('econeditor');
+  if (!box) return;
+  const eco = econDraft || (window.__eco || { incomes: [], stores: [] });
+  box.innerHTML = '';
+
+  const t1 = document.createElement('div');
+  t1.className = 'sub';
+  t1.style.margin = '8px 0 2px';
+  t1.textContent = '收入来源（名称 / 最低 / 最高）';
+  box.appendChild(t1);
+  (eco.incomes || []).forEach((row, i) => {
+    const d = document.createElement('div');
+    d.className = 'econrow';
+    d.innerHTML = '<input data-f="name" value="' + (row.name || '') + '" ' + (editable ? '' : 'disabled') + '>' +
+      '<input data-f="min" type="number" value="' + (row.min ?? 0) + '" ' + (editable ? '' : 'disabled') + '>' +
+      '<input data-f="max" type="number" value="' + (row.max ?? 0) + '" ' + (editable ? '' : 'disabled') + '>' +
+      (editable ? '<button data-kind="income" data-i="' + i + '">×</button>' : '<span></span>');
+    d.querySelectorAll('input').forEach(inp => {
+      inp.oninput = () => {
+        const row2 = econDraft.incomes[i];
+        if (!row2) return;
+        if (inp.dataset.f === 'name') row2.name = inp.value;
+        else row2[inp.dataset.f] = Number(inp.value || 0);
+      };
+    });
+    box.appendChild(d);
+  });
+  if (editable) {
+    const add = document.createElement('div');
+    add.className = 'econadd';
+    add.textContent = '＋ 添加收入类型';
+    add.onclick = () => { econDraft.incomes.push({ name: '新收入', min: 10, max: 10 }); renderEcon(true); };
+    box.appendChild(add);
+  }
+
+  (eco.stores || []).forEach((store, si) => {
+    const head = document.createElement('div');
+    head.className = 'sub';
+    head.style.margin = '10px 0 2px';
+    if (editable) {
+      head.innerHTML = '<input class="storename" value="' + (store.name || '') + '">' +
+        ' <span style="cursor:pointer;color:#ff9e9e" data-delstore="' + si + '">删除店铺</span>';
+      const inp = head.querySelector('input');
+      inp.oninput = () => { if (econDraft.stores[si]) econDraft.stores[si].name = inp.value; };
+    } else {
+      head.innerHTML = '<b>' + store.name + '</b>';
+    }
+    box.appendChild(head);
+    (store.items || []).forEach((item, ii) => {
+      const d = document.createElement('div');
+      d.className = 'econrow shop';
+      d.innerHTML = '<input data-f="name" value="' + (item.name || '') + '" ' + (editable ? '' : 'disabled') + '>' +
+        '<input data-f="price" type="number" value="' + (item.price ?? 0) + '" ' + (editable ? '' : 'disabled') + '>' +
+        (editable ? '<button data-kind="item" data-s="' + si + '" data-i="' + ii + '">×</button>' : '<span></span>');
+      d.querySelectorAll('input').forEach(inp => {
+        inp.oninput = () => {
+          const it = econDraft.stores[si] && econDraft.stores[si].items[ii];
+          if (!it) return;
+          if (inp.dataset.f === 'name') it.name = inp.value;
+          else it.price = Number(inp.value || 0);
+        };
+      });
+      box.appendChild(d);
+    });
+    if (editable) {
+      const addItem = document.createElement('div');
+      addItem.className = 'econadd';
+      addItem.textContent = '＋ 给「' + store.name + '」加商品';
+      addItem.onclick = () => { store.items.push({ name: '新商品', price: 10 }); renderEcon(true); };
+      box.appendChild(addItem);
+    }
+  });
+
+  if (editable) {
+    const addStore = document.createElement('div');
+    addStore.className = 'econadd';
+    addStore.textContent = '＋ 添加店铺';
+    addStore.onclick = () => { econDraft.stores.push({ name: '新店铺', items: [] }); renderEcon(true); };
+    box.appendChild(addStore);
+
+    const save = document.createElement('button');
+    save.className = 'savebtn';
+    save.textContent = '保存资金出入设置';
+    save.onclick = async () => {
+      try {
+        const r = await fetch('/roomapi/economy', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(Object.assign({ password: window.__econPwd || '' }, econDraft))
+        });
+        if (r.status === 403) { alert('密码不对，没有保存'); return; }
+        const data = await r.json();
+        if (!data.ok) { alert('保存失败：' + (data.error || '未知错误')); return; }
+        const sub = document.getElementById('ledgersub');
+        if (sub) sub.textContent = '已保存，正在生效…';
+        setTimeout(() => poll(), 1200);
+        setTimeout(() => poll(), 4000);
+      } catch (e) {
+        alert('保存失败：网络错误');
+      }
+    };
+    box.appendChild(save);
+
+    box.querySelectorAll('button[data-kind]').forEach(btn => {
+      btn.onclick = () => {
+        const kind = btn.dataset.kind;
+        if (kind === 'income') econDraft.incomes.splice(Number(btn.dataset.i), 1);
+        else econDraft.stores[Number(btn.dataset.s)].items.splice(Number(btn.dataset.i), 1);
+        renderEcon(true);
+      };
+    });
+    box.querySelectorAll('[data-delstore]').forEach(el => {
+      el.onclick = () => { econDraft.stores.splice(Number(el.dataset.delstore), 1); renderEcon(true); };
+    });
+  }
+}
+
+let econUnlocked = false;
+
+const econBtnEl = document.getElementById('econbtn');
+if (econBtnEl) econBtnEl.onclick = async () => {
+  const box = document.getElementById('econeditor');
+  const btn = document.getElementById('econbtn');
+  if (!econUnlocked) {
+    const pwd = prompt('修改资金出入设置需要密码：');
+    if (pwd === null) return;
+    try {
+      const r = await fetch('/roomapi/auth', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: pwd }) });
+      const data = await r.json();
+      if (!data.ok) { alert('密码不对'); return; }
+    } catch (e) { alert('校验失败'); return; }
+    econUnlocked = true;
+    window.__econPwd = pwd;
+  }
+  const open = box.style.display === 'none';
+  box.style.display = open ? 'block' : 'none';
+  btn.textContent = open ? '资金出入设置 ▴' : '资金出入设置 ▾';
+  if (open) {
+    window.__eco = window.__eco || { incomes: [], stores: [] };
+    econDraft = JSON.parse(JSON.stringify(window.__eco));
+    renderEcon(true);
+  }
+};
+
+document.getElementById('ledgerbtn').onclick = () => {
+  const box = document.getElementById('ledger');
+  box.classList.add('show');
+  const econBox = document.getElementById('econeditor');
+  if (econBox) econBox.style.display = 'none';
+  const econBtn = document.getElementById('econbtn');
+  if (econBtn) econBtn.textContent = '资金出入设置 ▾';
+};
+document.getElementById('ledgerclose').onclick = () => document.getElementById('ledger').classList.remove('show');
+document.getElementById('ledger').onclick = (e) => {
+  if (e.target.id === 'ledger') document.getElementById('ledger').classList.remove('show');
+};
+
+document.getElementById('toggle').onclick = () => {
+  const panel = document.getElementById('panel');
+  panel.classList.toggle('collapsed');
+  document.getElementById('toggle').textContent = panel.classList.contains('collapsed') ? '▸' : '▾';
+};
+clock(); setInterval(clock, 15000); poll(); setInterval(poll, 2000);
+</script>
+</body>
+</html>

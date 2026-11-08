@@ -32,21 +32,21 @@ def build(roster=None, cfg=None):
 
 
 class SendGap(unittest.IsolatedAsyncioTestCase):
-    async def test_text_gap_is_five_seconds(self):
+    async def test_text_gap_is_about_seven_seconds(self):
         f = build()
         f._last_out['s'] = __import__('time').time()
         with patch('luoxue_social.features.asyncio.sleep', AsyncMock()) as sleep:
             await f.send_gap('s', media=False)
         wait = sleep.await_args.args[0]
-        self.assertGreaterEqual(round(wait), 4)
-        self.assertLessEqual(round(wait), 5)
+        self.assertGreaterEqual(round(wait), 6)
+        self.assertLessEqual(round(wait), 7)
 
     async def test_media_gap_is_ten_seconds(self):
         f = build()
         f._last_out['s'] = __import__('time').time()
         with patch('luoxue_social.features.asyncio.sleep', AsyncMock()) as sleep:
             await f.send_gap('s', media=True)
-        self.assertGreaterEqual(round(sleep.await_args.args[0]), 9)
+        self.assertGreaterEqual(round(sleep.await_args.args[0]), 11)
 
     async def test_first_message_does_not_wait(self):
         f = build()

@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>洛雪 · 运行日志</title>
+<style>
+  :root{--line:rgba(120,190,255,.18);--txt:#d7e6f7;--dim:#6d86a5;--bg:#05080e}
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--txt);
+    font-family:ui-monospace,Consolas,"Cascadia Mono",monospace;font-size:12.5px}
+  header{position:sticky;top:0;z-index:5;display:flex;gap:10px;align-items:center;flex-wrap:wrap;
+    padding:10px 16px;background:rgba(5,8,14,.94);border-bottom:1px solid var(--line);backdrop-filter:blur(8px)}
+  header h1{font-size:13px;margin:0;letter-spacing:1px;font-family:"Segoe UI",system-ui,sans-serif}
+  .spacer{flex:1}
+  input{background:rgba(255,255,255,.05);border:1px solid var(--line);border-radius:8px;
+    color:var(--txt);padding:5px 10px;font-size:12px;outline:none;font-family:inherit}
+  #q{width:200px}
+  button{background:rgba(255,255,255,.05);border:1px solid var(--line);color:#b9cce6;
+    border-radius:8px;padding:5px 11px;font-size:11.5px;cursor:pointer;font-family:"Segoe UI",system-ui,sans-serif}
+  button.on{background:rgba(127,240,208,.16);color:#dff6ef;border-color:rgba(127,240,208,.4)}
+  #stat{font-size:11px;color:var(--dim);font-family:"Segoe UI",system-ui,sans-serif}
+  #log{padding:8px 16px 80px;white-space:pre-wrap;word-break:break-word;line-height:1.65}
+  .l{display:grid;grid-template-columns:1fr;padding:1px 0}
+  .l .t{color:#5f7896}
+  .err{color:#ff9b9b}.warn{color:#ffd28a}.info{color:#c8d8ea}.dim{color:#7f97b6}
+  #nav{position:fixed;right:16px;bottom:14px;display:flex;gap:8px;z-index:9}
+  #nav a{color:#cfe4ff;text-decoration:none;font-size:11.5px;padding:5px 11px;border-radius:9px;
+    border:1px solid var(--line);background:rgba(10,16,28,.85);font-family:"Segoe UI",system-ui,sans-serif}
+  #lock{position:fixed;inset:0;display:grid;place-items:center;background:var(--bg);z-index:20;
+    font-family:"Segoe UI",system-ui,sans-serif}
+  #lock input{width:160px;margin-top:12px}
+  #lock button{margin-top:10px}
+</style>
+</head>
+<body>
+<header>
+  <h1>洛雪 · 运行日志</h1>
+  <span id="stat">未连接</span>
+  <div class="spacer"></div>
+  <input id="q" type="search" name="luoxue-runtime-filter" autocomplete="off" spellcheck="false" placeholder="过滤关键词…">
+  <button id="pause">暂停滚动</button>
+  <button id="clear">清屏</button>
+  <button id="bottom">跳到底部</button>
+</header>
+<div id="log"></div>
+<div id="nav">
+  <a href="/">房间</a>
+  <a href="/log.html">她的日志</a>
+  <a href="/console.html">面板</a>
+</div>
+<div id="lock"><div style="text-align:center">
+  <div style="font-size:13px;color:#9fd8ff">运行日志需要密码</div>
+  <input id="pw" type="password" placeholder="密码">
+  <div><button id="go">进入</button></div>
+</div></div>
+
+<script>
+(() => {
+  let paused = false, keyword = '', source = null, count = 0;
+  const logEl = document.getElementById('log');
+  const stat = document.getElementById('stat');
+
+  function classify(line) {
+    if (/\[ERRO\]|Traceback|Error|异常/i.test(line)) return 'err';
+    if (/\[WARN\]/i.test(line)) return 'warn';
+    if (/\[INFO\]/i.test(line)) return 'info';
+    return 'dim';
+  }
+  function stripAnsi(text) {
+    return String(text).replace(/\x1b\[[0-9;]*m/g, '');
+  }
+  function append(line) {
+    const clean = stripAnsi(line);
+    if (keyword && !clean.includes(keyword)) return;
+    const div = document.createElement('div');
+    div.className = 'l ' + classify(clean);
+    div.textContent = clean;
+    logEl.appendChild(div);
+    count++;
+    while (logEl.childElementCount > 1200) logEl.removeChild(logEl.firstChild);
+    if (!paused) window.scrollTo({ top: document.body.scrollHeight });
+    stat.textContent = paused ? '已暂停 · ' + count + ' 行' : '实时 · ' + count + ' 行';
+  }
+
+  async function start(pwd) {
+    if (source) source.abort();
+    const current = new AbortController();
+    source = current;
+    let response;
+    try {
+      response = await fetch('/runtime/stream', {
+        headers: {'X-Password': pwd}, cache: 'no-store', signal: current.signal
+      });
+    } catch {
+      return false;
+    }
+    if (!response.ok || !response.body) {
+      if (source === current) document.getElementById('lock').style.display = 'grid';
+      return false;
+    }
+    document.getElementById('lock').style.display = 'none';
+    const reader = response.body.pipeThrough(new TextDecoderStream()).getReader();
+    async function consume() {
+      let buffer = '';
+      try {
+        while (true) {
+          const {value, done} = await reader.read();
+          if (done) break;
+          buffer += value;
+          const lines = buffer.split('\n');
+          buffer = lines.pop();
+          for (const line of lines) {
+            if (!line.startsWith('data:')) continue;
+            const raw = line.slice(5).trim();
+            try { append(JSON.parse(raw)); } catch { append(raw); }
+          }
+        }
+      } catch {
+        if (current.signal.aborted) return;
+      }
+      if (source !== current) return;
+      stat.textContent = '连接断开，正在重连…';
+      setTimeout(() => { if (source === current) start(pwd); }, 4000);
+    }
+    consume();
+    return true;
+  }
+
+  document.getElementById('pause').onclick = (e) => {
+    paused = !paused;
+    e.target.classList.toggle('on', paused);
+    e.target.textContent = paused ? '继续滚动' : '暂停滚动';
+    stat.textContent = paused ? '已暂停' : '实时';
+  };
+  document.getElementById('clear').onclick = () => { logEl.innerHTML = ''; count = 0; };
+  document.getElementById('bottom').onclick = () => window.scrollTo({ top: document.body.scrollHeight });
+  const qEl2 = document.getElementById('q');
+  qEl2.value = '';
+  qEl2.addEventListener('input', (e) => {
+    keyword = e.target.value.trim();
+    stat.textContent = keyword ? '过滤：' + keyword : '实时';
+  });
+  document.getElementById('go').onclick = async () => {
+    const pwd = document.getElementById('pw').value.trim();
+    if (!pwd) return;
+    if (await start(pwd)) sessionStorage.setItem('luoxue_runtime_pw', pwd);
+    else alert('密码不对');
+  };
+
+  (async () => {
+    const saved = sessionStorage.getItem('luoxue_runtime_pw');
+    if (saved && await start(saved)) return;
+    document.getElementById('lock').style.display = 'grid';
+  })();
+})();
+</script>
+</body>
+</html>

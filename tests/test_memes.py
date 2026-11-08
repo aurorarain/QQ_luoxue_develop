@@ -56,12 +56,13 @@ class MemeTrigger(unittest.TestCase):
         chain = f.reply_chain('哼，才不是呢[表情:傲娇]', False, 'g')
         self.assertTrue(any(isinstance(c, Image) for c in chain))
 
-    def test_calm_line_still_needs_a_second_turn(self):
+    def test_marker_controls_the_sticker_now(self):
+        # 不再靠"第几轮"掷骰子：她写了标记就配，不写就不配
         f = build([], state={}, choose=lambda *a, **k: self.sticker())
         first = f.reply_chain('今天天气还行[表情:回应]', False, 'g')
-        self.assertFalse(any(isinstance(c, Image) for c in first))
-        second = f.reply_chain('吃了吗[表情:回应]', False, 'g')
-        self.assertTrue(any(isinstance(c, Image) for c in second))
+        self.assertTrue(any(isinstance(c, Image) for c in first))
+        plain = f.reply_chain('吃了吗', False, 'g')
+        self.assertFalse(any(isinstance(c, Image) for c in plain))
 
     def test_cooldown_blocks_back_to_back_stickers(self):
         f = build([], state={}, choose=lambda *a, **k: self.sticker())

@@ -1,0 +1,820 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>洛雪 · STATE CONSOLE</title>
+<style>
+  :root{
+    --bg:#05080f;--panel:rgba(14,20,34,.86);--panel2:rgba(20,28,46,.9);
+    --line:rgba(120,190,255,.16);--txt:#dfeaff;--dim:#8298b8;--acc:#7ff0d0;--acc2:#8fd8ff;
+    --warm:#ffcb8a;--pink:#ff9ec7;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{margin:0;background:
+      radial-gradient(900px 500px at 20% -10%,#10233c 0,rgba(5,8,15,0) 70%),
+      radial-gradient(700px 400px at 90% 10%,#1b1230 0,rgba(5,8,15,0) 70%),
+      var(--bg);
+    color:var(--txt);font-family:"Segoe UI","PingFang SC",system-ui,sans-serif;
+    display:flex;min-height:100vh}
+  /* ── 左侧导航 ── */
+  aside{width:196px;flex:0 0 196px;padding:18px 12px;border-right:1px solid var(--line);
+    background:linear-gradient(180deg,rgba(12,18,30,.95),rgba(6,10,18,.92));position:sticky;top:0;height:100vh;overflow:auto}
+  .brand{display:flex;align-items:center;gap:9px;margin-bottom:16px}
+  .avatar{width:38px;height:38px;border-radius:11px;flex:0 0 38px;object-fit:cover;
+    object-position:50% 20%;border:1px solid rgba(150,210,255,.28);background:#0d1626}
+  .brand b{font-size:13px;letter-spacing:1px;display:block}
+  .brand span{font-size:10px;color:var(--dim);letter-spacing:2px}
+  .navgroup{font-size:9.5px;color:#5b708f;letter-spacing:2px;margin:14px 0 6px 8px}
+  .nav{display:flex;flex-direction:column;gap:2px}
+  .nav a{display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:9px;color:#b9cce6;
+    text-decoration:none;font-size:12px;transition:.15s}
+  .nav a:hover{background:rgba(127,240,208,.08);color:#eaf6ff}
+  .nav a.on{background:linear-gradient(90deg,rgba(127,240,208,.18),rgba(127,240,208,.03));
+    color:var(--acc);box-shadow:inset 0 0 0 1px rgba(127,240,208,.18)}
+  aside .side-foot{margin-top:16px;font-size:10px;color:#4f6480;line-height:1.7}
+  /* ── 主区 ── */
+  main{flex:1;padding:20px 24px 40px;min-width:0}
+  header{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin-bottom:16px}
+  header h1{font-size:18px;margin:0;letter-spacing:2px}
+  header .sub{font-size:11.5px;color:var(--dim)}
+  header .right{margin-left:auto;display:flex;gap:8px;align-items:center}
+  .btn{cursor:pointer;border-radius:9px;border:1px solid var(--line);background:rgba(127,240,208,.12);
+    color:#dff6ef;padding:5px 12px;font-size:11.5px;text-decoration:none}
+  .btn.ghost{background:rgba(255,255,255,.05);color:#cfe0f5}
+  .cards{display:block}
+  .card{display:none;max-width:1080px;margin:0 auto}
+  .card.view-on{display:block;animation:fade .18s ease}
+  @keyframes fade{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:15px;padding:14px 16px;
+    backdrop-filter:blur(4px)}
+  .card h2{font-size:12.5px;margin:0 0 10px;letter-spacing:1px;color:#d8ecff;display:flex;gap:8px;align-items:center}
+  .card h2 em{font-style:normal;color:var(--acc);font-size:10px;border:1px solid rgba(127,240,208,.3);
+    borderRadius:6px;padding:1px 6px;border-radius:6px;opacity:.9}
+  .card.wide{grid-column:1/-1}
+  .row{display:grid;grid-template-columns:56px 1fr 42px;gap:8px;align-items:center;margin:5px 0;font-size:11.5px}
+  .bar{height:6px;border-radius:999px;background:rgba(255,255,255,.07);overflow:hidden}
+  .bar i{display:block;height:100%;border-radius:999px;background:linear-gradient(90deg,var(--acc2),var(--acc))}
+  .bar.warm i{background:linear-gradient(90deg,var(--warm),#ff9d5c)}
+  .bar.pink i{background:linear-gradient(90deg,var(--pink),#b47cff)}
+  .val{text-align:right;color:#a7bfdc;font-variant-numeric:tabular-nums}
+  .kv{display:flex;justify-content:space-between;gap:10px;font-size:11.5px;padding:5px 0;
+    border-bottom:1px dashed rgba(143,227,255,.1)}
+  .kv span{color:var(--dim)}
+  .kv b{font-weight:500;color:#dbe9ff}
+  .muted{color:var(--dim);font-size:11px;line-height:1.75}
+  .chips{display:flex;flex-wrap:wrap;gap:5px;margin-top:6px}
+  .chip{font-size:10px;border:1px solid rgba(150,210,255,.2);border-radius:999px;padding:1px 7px;
+    color:#c9dcf5;background:rgba(150,210,255,.06)}
+  .mem{border-left:2px solid rgba(127,240,208,.35);padding:4px 0 4px 9px;margin:7px 0;font-size:11.5px}
+  .mem .who{color:var(--acc);font-size:10.5px;letter-spacing:1px}
+  .mem .time{color:#5f7797;font-size:10px;margin-left:6px}
+  .mem p{margin:2px 0 0;color:#cfe0f5;line-height:1.6;word-break:break-word}
+  .grid-imgs{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:8px}
+  .grid-imgs img{width:100%;height:104px;object-fit:contain;border-radius:10px;
+    border:1px solid var(--line);cursor:zoom-in;
+    background:repeating-conic-gradient(#1b2436 0% 25%,#111a2a 0% 50%) 50%/16px 16px}
+  #lightbox{position:fixed;inset:0;background:rgba(3,6,12,.9);display:none;place-items:center;z-index:60}
+  #lightbox.on{display:grid}
+  #lightbox img{max-width:88vw;max-height:86vh;border-radius:12px;
+    background:repeating-conic-gradient(#1b2436 0% 25%,#111a2a 0% 50%) 50%/22px 22px}
+  .bk{display:flex;justify-content:space-between;font-size:11.5px;padding:5px 0;
+    border-bottom:1px dashed rgba(143,227,255,.1)}
+  .bk em{font-style:normal;color:var(--dim);font-size:10.5px}
+  input{background:rgba(255,255,255,.05);border:1px solid var(--line);border-radius:7px;
+    color:#eaf3ff;padding:3px 7px;font-size:11px;outline:none;width:100%}
+  .econrow{display:grid;gap:6px;margin:5px 0;font-size:11px}
+  .econrow.inc{grid-template-columns:1.3fr .6fr .6fr 22px}
+  .econrow.shop{grid-template-columns:1fr .6fr 22px}
+  .del{background:rgba(255,120,120,.16);border-color:rgba(255,140,140,.32);color:#ffc9c9;padding:2px 0}
+  .add{font-size:11px;color:var(--acc);cursor:pointer;user-select:none;margin:6px 0}
+  .storename{width:130px;font-weight:600}
+  .promise{font-size:11.5px;color:#cfe0f5;line-height:1.7;margin:6px 0}
+  .promise b{color:var(--warm);font-weight:500}
+  .topo{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+  .topo2{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+  .tnode{border:1px solid rgba(127,240,208,.28);border-radius:10px;padding:8px 12px;font-size:11.5px;
+    background:rgba(127,240,208,.07);color:#d9f8ef;display:flex;flex-direction:column;gap:2px;min-width:96px}
+  .tnode small{font-size:9.5px;color:#7fb9a8;letter-spacing:.5px}
+  .tnode.core{background:rgba(143,216,255,.1);border-color:rgba(143,216,255,.3);color:#dff1ff}
+  .tnode.mid{background:rgba(255,255,255,.05);border-color:var(--line);color:#cfdff5}
+  .tnode.side{opacity:.85;font-size:11px}
+  .tarrow{color:#5d7f96}
+  .web{width:100%;height:auto;display:block;border-radius:12px;background:rgba(8,14,24,.5);
+    border:1px solid rgba(127,240,208,.1)}
+  .web text{font-size:9px;fill:#a9cfe0;font-family:inherit}
+  .web circle{transition:.2s}
+  .lockbox{padding:26px 10px;text-align:center;color:#7f97b8;font-size:12.5px;line-height:2}
+  .lockbox b{color:#ffd28c}
+  .toast{position:fixed;right:18px;bottom:18px;background:rgba(14,22,38,.95);border:1px solid var(--line);
+    border-radius:10px;padding:9px 14px;font-size:11.5px;color:#dff6ef;opacity:0;transition:.2s;z-index:50}
+  .toast.on{opacity:1}
+  @media(max-width:820px){
+    body{flex-direction:column}
+    aside{width:100%;flex:none;height:auto;position:relative;display:flex;flex-wrap:wrap;gap:6px;padding:12px}
+    aside .brand{width:100%}
+    .nav{flex-direction:row;flex-wrap:wrap}
+    .navgroup,aside .side-foot{display:none}
+    main{padding:14px}
+  }
+</style>
+</head>
+<body>
+<aside>
+  <div class="brand">
+    <img class="avatar" src="/assets/avatar.png?v=1" alt="">
+    <div><b>洛雪</b><span>STATE CONSOLE</span></div>
+  </div>
+  <div class="navgroup">PROFILE 人物</div>
+  <div class="nav">
+    <a href="#overview" class="on">◇ 概览</a>
+    <a href="#persona">◇ 人格档案</a>
+    <a href="#life">◇ 她的人生</a>
+    <a href="#body">◇ 身体状态</a>
+  </div>
+  <div class="navgroup">MOOD 情绪</div>
+  <div class="nav">
+    <a href="#emotion">◇ 七情·六欲</a>
+    <a href="#memory">◇ 记忆</a>
+    <a href="#promise">◇ 承诺</a>
+    <a href="#heartbeat">◇ 她的念头</a>
+  </div>
+  <div class="navgroup">HOME 家与外面</div>
+  <div class="nav">
+    <a href="#home">◇ 家</a>
+    <a href="#map">◇ 外面与店铺</a>
+  </div>
+  <div class="navgroup">WORKS 作品</div>
+  <div class="nav">
+    <a href="#skill">◇ 技能</a>
+    <a href="#album">◇ 相册</a>
+    <a href="#book">◇ 书</a>
+  </div>
+  <div class="navgroup">LOG 记录</div>
+  <div class="nav">
+    <a href="/memories.html" target="_blank">✦ 记忆星图</a>
+    <a href="/log.html" target="_blank">✧ 她的日志</a>
+    <a href="/runtime.html" target="_blank">▣ 运行日志</a>
+    <a href="#timeline">◇ 时间线</a>
+    <a href="#diary">◇ 日记</a>
+  </div>
+  <div class="navgroup">SYSTEM 系统</div>
+  <div class="nav">
+    <a href="#run">◇ 运行状态</a>
+    <a href="#topo">◇ 系统拓扑</a>
+    <a href="#settings">◇ 设置</a>
+  </div>
+  <div class="side-foot">人物、记忆与房子的统一管理<br>改动仅对本机生效</div>
+</aside>
+
+<main>
+  <header>
+    <h1>洛雪</h1>
+    <span class="sub" id="subline">—</span>
+    <div class="right">
+      <span class="sub" id="clockline">--:--</span>
+      <button class="btn" id="unlockbtn" onclick="askPassword()">🔒 解锁</button>
+      <a class="btn ghost" href="/">← 回到房间</a>
+    </div>
+  </header>
+
+  <div class="cards">
+    <section class="card" id="overview">
+      <h2>常规状态 <em>LIVE</em></h2>
+      <div id="stats"></div>
+      <div class="muted" id="mood" style="margin-top:8px">—</div>
+      <div class="chips" id="chips"></div>
+    </section>
+
+    <section class="card" id="life" data-protect="1">
+      <h2>她的人生 <em>大事记</em></h2>
+      <div id="life-list"></div>
+      <div class="muted">只有她自己觉得重要的事才写进来，不是流水账。</div>
+    </section>
+
+    <section class="card" id="persona">
+      <h2>人格档案 <em>SELF</em></h2>
+      <div class="kv"><span>称呼</span><b>洛雪</b></div>
+      <div class="kv"><span>身份</span><b>鲸鱼娘 · 女仆装</b></div>
+      <div class="kv"><span>性格</span><b>高贵又聪明，嘴硬心软</b></div>
+
+      <div class="muted" style="margin-top:8px">
+        蓝黑色长发、白色蕾丝发箍、鲸鳍耳、深蓝白女仆裙、围裙上印着小鲸鱼、一条鲸尾。
+        说话有分寸，会撒娇也会嘴硬；被冷落会真的难过。
+      </div>
+    </section>
+
+    <section class="card" id="body">
+      <h2>身体状态 <em>BODY</em></h2>
+      <div class="kv"><span>当前在做</span><b id="b-act">—</b></div>
+      <div class="kv"><span>病况</span><b id="b-ill">—</b></div>
+      <div class="kv"><span>作息</span><b id="b-sleep">—</b></div>
+      <div class="kv"><span>天气</span><b id="b-weather">—</b></div>
+      <div class="kv"><span>体力 / 饱腹</span><b id="b-need">—</b></div>
+      <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
+        <button class="btn" onclick="systemCmd('heal')">立即痊愈</button>
+        <button class="btn ghost" onclick="systemCmd('wake')">叫醒她</button>
+      </div>
+    </section>
+
+    <section class="card" id="emotion" data-protect="1">
+      <h2>七情 <em>0-100</em></h2>
+      <div id="emotions"></div>
+      <div class="muted" id="emoline">—</div>
+      <div class="muted" style="margin:12px 0 4px">六欲</div>
+      <div id="desires"></div>
+      <div class="muted" id="desline">—</div>
+    </section>
+
+
+    <section class="card wide" id="memory" data-protect="1">
+      <h2>记忆 <em>最近对话</em></h2>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px">
+        <div><div class="muted">私聊</div><div id="mem-private"></div></div>
+        <div><div class="muted">群聊</div><div id="mem-group"></div></div>
+      </div>
+    </section>
+
+    <section class="card" id="heartbeat" data-protect="1">
+      <h2>她的念头 <em>HEARTBEAT</em></h2>
+      <div id="hb-list"></div>
+      <div class="muted">每隔十几分钟她会自己想一次，做什么由她自己决定。</div>
+    </section>
+
+    <section class="card" id="promise" data-protect="1">
+      <h2>承诺与待办 <em>PROMISE</em></h2>
+      <div id="promises"></div>
+      <div class="muted" id="promiseline"></div>
+    </section>
+
+    <section class="card" id="home">
+      <h2>家 <em>ROOM</em></h2>
+      <div class="kv"><span>当前在做</span><b id="h-act">—</b></div>
+      <div class="kv"><span>是否在家</span><b id="h-away">—</b></div>
+      <div class="kv"><span>书架</span><b id="h-books">—</b></div>
+      <div class="kv"><span>房间物件</span><b id="h-props">—</b></div>
+    </section>
+
+    <section class="card" id="map">
+      <h2>外面与店铺 <em>WORLD</em></h2>
+      <div class="kv"><span>外出</span><b id="m-out">—</b></div>
+      <div class="muted" style="margin-top:6px">她可以去的店</div>
+      <div class="chips" id="m-stores"></div>
+    </section>
+
+    <section class="card" id="skill">
+      <h2>技能 <em>SKILL</em></h2>
+      <div id="skills"></div>
+      <div class="muted" id="skillline"></div>
+    </section>
+
+    <section class="card wide" id="album">
+      <h2>相册 <em>她画的</em></h2>
+      <div class="grid-imgs" id="drawings"></div>
+      <div class="muted" style="margin-top:8px" id="stickersline">—</div>
+      <div class="chips" id="stickers"></div>
+    </section>
+
+    <section class="card" id="book">
+      <h2>书 <em>BOOKS</em></h2>
+      <div id="books"></div>
+    </section>
+
+    <section class="card wide" id="timeline" data-protect="1">
+      <h2>时间线 <em>ROOM LOG</em></h2>
+      <div id="timeline-list"></div>
+    </section>
+
+    <section class="card" id="diary" data-protect="1">
+      <h2>日记 <em>DIARY</em></h2>
+      <div id="diary-list"></div>
+    </section>
+
+    <section class="card" id="run">
+      <h2>运行状态 <em>SYS</em></h2>
+      <div id="run-list"></div>
+    </section>
+
+    <section class="card wide" id="topo">
+      <h2>系统拓扑 <em>MODULES</em></h2>
+      <div class="chips" style="margin-top:4px">
+        <span class="chip">房间状态</span><span class="chip">自我认知</span><span class="chip">对话</span>
+        <span class="chip">画画</span><span class="chip">语音</span><span class="chip">记忆网</span>
+        <span class="chip">钱包</span><span class="chip">店铺</span><span class="chip">天气</span>
+        <span class="chip">心跳</span><span class="chip">QQ状态</span><span class="chip">面板</span>
+      </div>
+      <div class="muted" style="margin-top:6px">闭环：状态 → 认知 → 对话/创作 → 记忆网 → 回写状态。</div>
+    </section>
+
+
+    <section class="card wide" id="settings" data-protect="1">
+      <h2>设置 · 资金出入 <em>查看不用密码</em></h2>
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap">
+        <input id="pwd" type="password" placeholder="密码" style="width:130px">
+        <button class="btn" onclick="unlock()">解锁修改</button>
+        <button class="btn ghost" onclick="saveEcon()">保存</button>
+        <span class="muted" id="econmsg">只读状态；修改需要密码</span>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;margin:14px 0 6px">
+        <span class="muted">心跳间隔（秒）</span>
+        <input id="hbint" type="number" min="60" step="30" value="300" style="width:90px">
+        <button class="btn ghost" onclick="setHeartbeat()">保存间隔</button>
+      </div>
+      <div id="econ"></div>
+    </section>
+  </div>
+</main>
+
+<div id="lightbox"><img alt=""></div>
+<div class="toast" id="toast"></div>
+
+<script>
+const PWKEY = 'luoxue_console_pwd';
+let state = null, full = null, ecoDraft = null;
+let drawingKey = null;
+
+function toast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg; el.classList.add('on');
+  clearTimeout(toast._t); toast._t = setTimeout(() => el.classList.remove('on'), 1800);
+}
+
+function bar(label, value, cls) {
+  const v = Math.max(0, Math.min(100, Number(value) || 0));
+  return '<div class="row"><span>' + label + '</span><div class="bar ' + (cls || '') +
+    '"><i style="width:' + v + '%"></i></div><span class="val">' + Math.round(v) + '</span></div>';
+}
+
+async function poll() {
+  try {
+    const pwd = sessionStorage.getItem(PWKEY);
+    const headers = pwd ? { 'X-Password': pwd } : {};
+    const a = await fetch('/roomapi/state?t=' + Date.now(), { cache: 'no-store', headers }).then(r => r.json());
+    state = a.state || {};
+    if (pwd) {
+      const r = await fetch('/roomapi/full?t=' + Date.now(),
+        { cache: 'no-store', headers: { 'X-Password': pwd } });
+      full = r.ok ? await r.json() : null;
+    } else {
+      full = null;
+    }
+    render();
+  } catch (e) {
+    document.getElementById('subline').textContent = '连不上服务';
+  }
+}
+
+function lockSections() {
+  const locked = !full;
+  document.querySelectorAll('[data-protect="1"]').forEach(card => {
+    let box = card.querySelector('.lockbox');
+    if (locked) {
+      if (!box) {
+        box = document.createElement('div');
+        box.className = 'lockbox';
+        box.innerHTML = '🔒 这块需要密码<br><b>右上角输入密码后可见</b>';
+        card.appendChild(box);
+      }
+      card.querySelectorAll(':scope > *:not(h2):not(.lockbox)').forEach(el => el.style.display = 'none');
+    } else {
+      if (box) box.remove();
+      card.querySelectorAll(':scope > *').forEach(el => el.style.display = '');
+    }
+  });
+}
+
+function renderDrawings(names) {
+  const gallery = document.getElementById('drawings');
+  const pwd = sessionStorage.getItem(PWKEY);
+  const key = JSON.stringify(names);
+  if (drawingKey === key) return;
+  drawingKey = key;
+  for (const img of gallery.querySelectorAll('img')) if (img.src.startsWith('blob:')) URL.revokeObjectURL(img.src);
+  const lightbox = document.getElementById('lightbox');
+  lightbox.classList.remove('on');
+  lightbox.querySelector('img').removeAttribute('src');
+  gallery.replaceChildren();
+  if (!names.length) {
+    const empty = document.createElement('div');
+    empty.className = 'muted';
+    empty.textContent = '还没有画过图';
+    gallery.append(empty);
+    return;
+  }
+  for (const name of names) {
+    const img = document.createElement('img');
+    img.alt = '洛雪的画';
+    gallery.append(img);
+    fetch('/roomapi/asset/' + encodeURIComponent(name), {headers:{'X-Password':pwd}})
+      .then(response => {
+        if (!response.ok) throw new Error('asset unavailable');
+        return response.blob();
+      })
+      .then(blob => { if (img.isConnected) img.src = URL.createObjectURL(blob); })
+      .catch(() => { if (img.isConnected) drawingKey = null; });
+    img.onclick = () => {
+      if (!img.src.startsWith('blob:')) return;
+      lightbox.querySelector('img').src = img.src;
+      lightbox.classList.add('on');
+    };
+  }
+}
+
+function render() {
+  const s = state, f = full || {};
+  lockSections();
+  document.getElementById('clockline').textContent = (s.clock || '--:--') + ' · ' + (s.phase || '');
+  document.getElementById('subline').textContent = (s.activity || '') +
+    (s.weather ? (' · ' + s.weather.kind + ' ' + s.weather.temp + '℃') : '');
+
+  const stats = s.stats || {};
+  document.getElementById('stats').innerHTML = Object.keys(stats).map(k => bar(k, stats[k])).join('');
+  document.getElementById('mood').textContent = s.mood || '';
+  document.getElementById('chips').innerHTML = (s.moodTags || [])
+    .map(t => '<span class="chip">' + t + '</span>').join('');
+
+  document.getElementById('b-act').textContent = s.activity || '—';
+  const ill = s.illness || {};
+  document.getElementById('b-ill').textContent = ill.label ? (ill.label + ' · 剩 ' + ill.remainH + 'h') : '健康';
+  document.getElementById('b-sleep').textContent = s.sleepMode || 'awake';
+  document.getElementById('b-weather').textContent = s.weather ? (s.weather.kind + ' ' + s.weather.temp + '℃') : '—';
+  document.getElementById('b-need').textContent = '体力 ' + (stats.体力 ?? '-') + ' / 饱腹 ' + (stats.饥饿 ?? '-');
+
+  const emo = s.emotions || {};
+  const order = ['喜', '怒', '哀', '惧', '爱', '怜', '恶', '欲'];
+  document.getElementById('emotions').innerHTML =
+    order.map(k => bar(k, emo[k] || 0, (k === '怒' || k === '恶') ? 'warm' : (k === '爱' ? 'pink' : ''))).join('');
+  const top = order.map(k => [k, Number(emo[k] || 0)]).sort((x, y) => y[1] - x[1])[0];
+  document.getElementById('emoline').textContent = top && top[1] > 5
+    ? ('最明显：' + top[0] + ' ' + Math.round(top[1])) : '情绪平稳';
+
+  const des = s.desires || {};
+  const dorder = ['见', '听', '香', '味', '触', '意'];
+  document.getElementById('desires').innerHTML = dorder.map(k => bar(k, des[k] || 0)).join('');
+  const low = dorder.filter(k => Number(des[k]) < 30);
+  document.getElementById('desline').textContent = low.length ? ('缺：' + low.join('、')) : '欲望都还满足';
+
+  const memBlock = (rows) => (rows || []).slice(-6).reverse().map(m =>
+    '<div class="mem"><div><span class="who">' + (m.sender || '?') + '</span>' +
+    '<span class="time">' + fmtTime(m.time) + '</span></div><p>' +
+    escapeHtml(String(m.text || '').slice(0, 160)) + '</p></div>').join('') ||
+    '<div class="muted">暂无</div>';
+  document.getElementById('mem-private').innerHTML = memBlock(f.private);
+  document.getElementById('mem-group').innerHTML = memBlock(f.group);
+
+  document.getElementById('life-list').innerHTML = (s.lifeEvents || []).slice().reverse().slice(0, 12)
+    .map(e => '<div class="kv"><span>' + fmtTime(e.at) + '</span><b>' + escapeHtml(e.text || '') + '</b></div>')
+    .join('') || '<div class="muted">还没有值得记下来的事</div>';
+
+  document.getElementById('hb-list').innerHTML = (f.heartbeat || []).slice().reverse()
+    .map(h => '<div class="kv"><span>' + (h.time || '') + ' ' + (h.action || '') + '</span><b>' +
+      escapeHtml(h.thought || h.text || '') + '</b></div>').join('') ||
+    '<div class="muted">还没有记录</div>';
+
+  const reminders = (f.reminders || []).map(r => ({
+    text: r.text || '', when: r.due ? fmtTime(r.due) : '', done: !!r.sent, kind: '提醒'
+  }));
+  const said = (f.timeline || []).filter(t => /答应|说好|一定|下次|提醒/.test(String(t.text || '')))
+    .slice(-5).reverse().map(t => ({ text: t.text || '', when: t.time || '', done: false, kind: '她说的' }));
+  const promiseRows = reminders.concat(said).slice(0, 10);
+  document.getElementById('promises').innerHTML = promiseRows.map(p =>
+    '<div class="promise"><b>' + (p.done ? '✓ ' : '· ') + escapeHtml(p.text) + '</b><br><span class="muted">' +
+    p.kind + ' · ' + p.when + (p.done ? ' · 已完成' : ' · 待办') + '</span></div>').join('') ||
+    '<div class="muted">现在没有答应你的事</div>';
+  document.getElementById('promiseline').textContent =
+    '提醒来自真实的提醒队列（设了时间的事）；「她说的」是从时间线里抓的答应过的话。';
+
+  document.getElementById('h-act').textContent = s.activity || '—';
+  document.getElementById('h-away').textContent = s.away ? ('出门了 · 还剩 ' + s.awayRemain + ' 分钟') : '在家';
+  document.getElementById('h-books').textContent = (s.books || []).length + ' 本';
+  document.getElementById('h-props').textContent = (s.props || []).join('、') || '普通家具';
+
+  document.getElementById('m-out').textContent = s.away
+    ? ((s.outing && s.outing.place) || '外面') + (s.outing && s.outing.doing ? (' · ' + s.outing.doing) : '')
+    : '没出门';
+  document.getElementById('m-stores').innerHTML = ((s.economy || {}).stores || [])
+    .map(st => '<span class="chip">' + st.name + '(' + (st.items || []).length + ')</span>').join('');
+
+  const drawings = f.drawings || [];
+  const stickers = f.stickers || s.stickers || { count: 0, names: [] };
+  document.getElementById('skills').innerHTML = [
+    ['画画', Math.min(100, drawings.length * 6 + 20)],
+    ['写作', Math.min(100, ((f.diary || []).length) * 8 + 15)],
+    ['做饭', Number(stats.饥饿) > 50 ? 70 : 55],
+  ].map(([k, v]) => bar(k, v)).join('');
+  document.getElementById('skillline').textContent =
+    '练习次数：画画 ' + drawings.length + ' · 表情包 ' + stickers.count + ' 张';
+
+  renderDrawings(drawings.slice(0, 12));
+  document.getElementById('stickersline').textContent = '收藏的表情包 ' + stickers.count + ' 张';
+  document.getElementById('stickers').innerHTML = (stickers.names || []).slice(0, 18)
+    .map(n => '<span class="chip">' + escapeHtml(n) + '</span>').join('');
+
+  document.getElementById('books').innerHTML = (s.books || []).slice().reverse().map(b => {
+    const title = typeof b === 'string' ? b : (b.title || '');
+    const meta = typeof b === 'string' ? '' : [b.at, b.store].filter(Boolean).join(' · ');
+    return '<div class="bk"><span>' + title + '</span><em>' + meta + '</em></div>';
+  }).join('') || '<div class="muted">书架是空的</div>';
+
+  document.getElementById('timeline-list').innerHTML = (f.timeline || []).slice().reverse()
+    .map(t => '<div class="kv"><span>' + (t.time || '') + '</span><b>' + escapeHtml(t.text || '') + '</b></div>')
+    .join('') || '<div class="muted">还没有记录</div>';
+
+  const diary = (f.diary || []).slice(-4).reverse();
+  document.getElementById('diary-list').innerHTML = diary.map(d =>
+    '<div class="mem"><div><span class="who">' + (d.day || '') + '</span></div><p>' +
+    escapeHtml(String(d.text || d.content || '').slice(0, 220)) + '</p></div>').join('') ||
+    '<div class="muted">最近没写</div>';
+
+  const h = f.health || {};
+  document.getElementById('run-list').innerHTML = [
+    ['服务', '运行中'],
+    ['状态文件', h.saved_at ? ('已保存 ' + h.saved_at) : '正常'],
+    ['主动聊天', (f.proactive && f.proactive.enabled) ? '开' : '关'],
+    ['群主动', (f.proactive && f.proactive.group) ? '开' : '关'],
+    ['空间说说', f.postStatus || '—'],
+    ['服务器时间', new Date((f.serverTime || 0) * 1000).toLocaleTimeString('zh-CN')],
+  ].map(([k, v]) => '<div class="kv"><span>' + k + '</span><b>' + escapeHtml(String(v)) + '</b></div>').join('');
+
+  drawSpider();
+  drawMemNet();
+  ecoDraft = (full && full.economy) ? JSON.parse(JSON.stringify(full.economy))
+    : (s.economy ? JSON.parse(JSON.stringify(s.economy)) : { incomes: [], stores: [] });
+  renderEcon();
+}
+
+function drawSpider() {
+  const svg = document.getElementById('webtopo');
+  if (!svg) return;
+  const cx = 450, cy = 200, rings = 3;
+  const nodes = [
+    ['房间状态', 'room_state'], ['提示词', 'self_awareness'], ['对话', 'chat'],
+    ['画画', 'draw'], ['语音', 'voice'], ['记忆', 'memory'],
+    ['钱包', 'wallet'], ['店铺', 'stores'], ['天气', 'weather'],
+    ['心跳', 'heartbeat'], ['QQ', 'qq_status'], ['面板', 'console'],
+  ];
+  let html = '';
+  for (let r = 1; r <= rings; r++) {
+    const rad = 60 + r * 46;
+    html += '<ellipse cx="' + cx + '" cy="' + cy + '" rx="' + rad * 1.6 + '" ry="' + rad +
+      '" fill="none" stroke="rgba(127,240,208,.10)"/>';
+  }
+  nodes.forEach((n, i) => {
+    const angle = (i / nodes.length) * Math.PI * 2 - Math.PI / 2;
+    const x = cx + Math.cos(angle) * 300, y = cy + Math.sin(angle) * 170;
+    html += '<line x1="' + cx + '" y1="' + cy + '" x2="' + x + '" y2="' + y +
+      '" stroke="rgba(143,216,255,.22)"/>';
+  });
+  html += '<circle cx="' + cx + '" cy="' + cy + '" r="16" fill="rgba(127,240,208,.22)"' +
+    ' stroke="rgba(127,240,208,.6)"/><text x="' + (cx - 14) + '" y="' + (cy + 4) + '">核心</text>';
+  nodes.forEach((n, i) => {
+    const angle = (i / nodes.length) * Math.PI * 2 - Math.PI / 2;
+    const x = cx + Math.cos(angle) * 300, y = cy + Math.sin(angle) * 170;
+    html += '<circle cx="' + x + '" cy="' + y + '" r="9" fill="rgba(143,216,255,.18)"' +
+      ' stroke="rgba(143,216,255,.55)"/>' +
+      '<text x="' + (x - 20) + '" y="' + (y + 24) + '">' + n[0] + '</text>';
+  });
+  svg.innerHTML = html;
+}
+
+function drawMemNet() {
+  const svg = document.getElementById('memnet');
+  if (!svg) return;
+  const graph = (full && full.memoryGraph) || null;
+  if (!graph || !graph.nodes || !graph.nodes.length) {
+    svg.innerHTML = '<text x="20" y="30">解锁后显示记忆节点（还没有积累）</text>';
+    return;
+  }
+  const nodes = graph.nodes.slice(-40);
+  const id2idx = {};
+  nodes.forEach((n, i) => { id2idx[n.id] = i; });
+  // 环形布局，按真实连边
+  const cx = 450, cy = 180;
+  const pos = nodes.map((n, i) => {
+    const angle = (i / nodes.length) * Math.PI * 2;
+    const radius = 120 + (i % 2) * 40;
+    return { x: cx + Math.cos(angle) * radius, y: cy + Math.sin(angle) * radius };
+  });
+  let html = '';
+  (graph.edges || []).forEach(edge => {
+    const a = id2idx[edge[0]], b = id2idx[edge[1]];
+    if (a === undefined || b === undefined) return;
+    html += '<line x1="' + pos[a].x + '" y1="' + pos[a].y + '" x2="' + pos[b].x + '" y2="' + pos[b].y +
+      '" stroke="rgba(127,240,208,.22)" stroke-width="1"/>';
+  });
+  nodes.forEach((n, i) => {
+    const speaker = String(n.speaker || '').slice(0, 6);
+    html += '<circle cx="' + pos[i].x + '" cy="' + pos[i].y + '" r="' + (4 + Math.min(6, (n.kws || []).length)) +
+      '" fill="rgba(143,216,255,.24)" stroke="rgba(143,216,255,.6)"/>' +
+      '<text x="' + (pos[i].x - 14) + '" y="' + (pos[i].y - 12) + '">' + speaker + '</text>';
+  });
+  html += '<text x="20" y="350">节点 ' + graph.nodes.length + ' · 连线 ' + (graph.edges || []).length +
+    ' · 越大的点关键词越丰富</text>';
+  svg.innerHTML = html;
+}
+
+function fmtTime(ts) {
+  if (!ts) return '';
+  const d = new Date(ts * 1000);
+  return (d.getMonth() + 1) + '-' + d.getDate() + ' ' +
+    String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+}
+function escapeHtml(str) {
+  return String(str).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+let econLocked = true;
+
+function renderEcon() {
+  const box = document.getElementById('econ');
+  if (!box || !ecoDraft) return;
+  box.innerHTML = '';
+  const t1 = document.createElement('div');
+  t1.className = 'muted'; t1.textContent = '收入来源';
+  box.appendChild(t1);
+  (ecoDraft.incomes || []).forEach((row, i) => {
+    const d = document.createElement('div');
+    d.className = 'econrow inc';
+    d.innerHTML = '<input data-k="name" value="' + escapeHtml(row.name || '') + '">' +
+      '<input data-k="min" type="number" value="' + (row.min ?? 0) + '">' +
+      '<input data-k="max" type="number" value="' + (row.max ?? 0) + '">' +
+      '<button class="del" data-del="inc" data-i="' + i + '">×</button>';
+    d.querySelectorAll('input').forEach(inp => {
+      inp.disabled = econLocked;
+      inp.oninput = () => {
+        const k = inp.dataset.k;
+        ecoDraft.incomes[i][k] = (k === 'name' ? inp.value : Number(inp.value || 0));
+      };
+    });
+    box.appendChild(d);
+  });
+  const addInc = document.createElement('div');
+  addInc.className = 'add'; addInc.textContent = '＋ 添加收入类型';
+  addInc.onclick = () => { econDraft.incomes.push({ name: '新收入', min: 10, max: 10 }); renderEcon(); };
+  if (!econLocked) box.appendChild(addInc);
+
+  const opened = window.__storeOpen || (window.__storeOpen = {});
+  (ecoDraft.stores || []).forEach((store, si) => {
+    const head = document.createElement('div');
+    head.style.cssText = 'display:flex;gap:8px;align-items:center;margin:8px 0 4px;font-size:12px;' +
+      'cursor:pointer;padding:4px 6px;border-radius:8px;background:rgba(255,255,255,.03)';
+    const isOpen = !!opened[store.name];
+    head.innerHTML = '<span class="caret" style="width:12px;color:#8fd8ff">' + (isOpen ? '▾' : '▸') + '</span>' +
+      '<input class="storename" value="' + escapeHtml(store.name || '') + '">' +
+      '<span class="muted">' + (store.items || []).length + ' 件</span>' +
+      '<button class="del" data-del="store" data-i="' + si + '" style="width:48px">删店</button>';
+    const nameInput = head.querySelector('input');
+    nameInput.disabled = econLocked;
+    nameInput.oninput = (e) => { ecoDraft.stores[si].name = e.target.value; };
+    head.onclick = (e) => {
+      if (e.target === nameInput || e.target.dataset.del) return;
+      opened[store.name] = !isOpen;
+      renderEcon();
+    };
+    box.appendChild(head);
+    if (!isOpen) return;
+    (store.items || []).forEach((item, ii) => {
+      const d = document.createElement('div');
+      d.className = 'econrow shop';
+      d.innerHTML = '<input data-k="name" value="' + escapeHtml(item.name || '') + '">' +
+        '<input data-k="price" type="number" value="' + (item.price ?? 0) + '">' +
+        '<button class="del" data-del="item" data-s="' + si + '" data-i="' + ii + '">×</button>';
+      d.querySelectorAll('input').forEach(inp => {
+        inp.disabled = econLocked;
+        inp.oninput = () => {
+          const k = inp.dataset.k;
+          ecoDraft.stores[si].items[ii][k] = (k === 'name' ? inp.value : Number(inp.value || 0));
+        };
+      });
+      box.appendChild(d);
+    });
+    const addItem = document.createElement('div');
+    addItem.className = 'add';
+    addItem.textContent = '＋ 给「' + (store.name || '') + '」加商品';
+    addItem.onclick = () => { ecoDraft.stores[si].items.push({ name: '新商品', price: 10 }); renderEcon(); };
+    if (!econLocked) box.appendChild(addItem);
+  });
+
+  const addStore = document.createElement('div');
+  addStore.className = 'add'; addStore.textContent = '＋ 添加店铺';
+  addStore.onclick = () => { ecoDraft.stores.push({ name: '新店铺', items: [] }); renderEcon(); };
+  if (!econLocked) box.appendChild(addStore);
+
+  box.querySelectorAll('[data-del]').forEach(btn => {
+    if (econLocked) { btn.style.display = 'none'; return; }
+    btn.onclick = () => {
+      const kind = btn.dataset.del, i = Number(btn.dataset.i);
+      if (kind === 'inc') ecoDraft.incomes.splice(i, 1);
+      else if (kind === 'store') ecoDraft.stores.splice(i, 1);
+      else ecoDraft.stores[Number(btn.dataset.s)].items.splice(i, 1);
+      renderEcon();
+    };
+  });
+}
+
+async function askPassword() {
+  if (sessionStorage.getItem(PWKEY)) {
+    sessionStorage.removeItem(PWKEY);
+    econLocked = true;
+    full = null;
+    const btn = document.getElementById('unlockbtn');
+    if (btn) { btn.textContent = '🔒 解锁'; btn.classList.remove('ghost'); }
+    toast('已锁定');
+    render();
+    return;
+  }
+  const pwd = prompt('输入密码：');
+  if (!pwd) return;
+  const r = await fetch('/roomapi/auth', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ password: pwd }) });
+  const data = await r.json();
+  if (!data.ok) { toast('密码不对'); return; }
+  sessionStorage.setItem(PWKEY, pwd);
+  econLocked = false;
+  const btn = document.getElementById('unlockbtn');
+  if (btn) { btn.textContent = '🔓 已解锁'; btn.classList.add('ghost'); }
+  toast('已解锁');
+  await poll();
+}
+
+async function unlock() {
+  const pwd = document.getElementById('pwd').value;
+  const r = await fetch('/roomapi/auth', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ password: pwd }) });
+  const data = await r.json();
+  if (!data.ok) { document.getElementById('econmsg').textContent = '密码不对'; return; }
+  sessionStorage.setItem(PWKEY, pwd);
+  econLocked = false;
+  renderEcon();
+  document.getElementById('econmsg').textContent = '已解锁，可以修改';
+  toast('已解锁');
+}
+
+async function saveEcon() {
+  const pwd = sessionStorage.getItem(PWKEY) || document.getElementById('pwd').value;
+  const r = await fetch('/roomapi/economy', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(Object.assign({ password: pwd }, ecoDraft))
+  });
+  if (r.status === 403) { document.getElementById('econmsg').textContent = '密码不对，未保存'; return; }
+  const data = await r.json();
+  document.getElementById('econmsg').textContent = data.ok ? '已保存，几秒后生效' : '保存失败';
+  toast(data.ok ? '已保存' : '保存失败');
+  setTimeout(poll, 1500);
+}
+
+async function setHeartbeat() {
+  const pwd = sessionStorage.getItem(PWKEY);
+  if (!pwd) { toast('先解锁'); return; }
+  const value = Number(document.getElementById('hbint').value || 300);
+  const r = await fetch('/roomapi/system', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ password: pwd, cmd: 'hb_interval', value })
+  });
+  toast(r.ok ? ('心跳改为 ' + value + ' 秒') : '失败：先解锁');
+}
+
+async function systemCmd(cmd) {
+  const pwd = sessionStorage.getItem(PWKEY) || document.getElementById('pwd').value;
+  const r = await fetch('/roomapi/system', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ password: pwd, cmd })
+  });
+  toast(r.ok ? ('已执行：' + cmd) : '失败：先解锁');
+  setTimeout(poll, 1200);
+}
+
+// 分页：导航切换只显示一个区块
+function showView(id) {
+  const target = document.getElementById(id) || document.getElementById('overview');
+  document.querySelectorAll('.card').forEach(c => c.classList.toggle('view-on', c === target));
+  document.querySelectorAll('.nav a').forEach(x => {
+    x.classList.toggle('on', x.getAttribute('href') === '#' + target.id);
+  });
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+document.querySelectorAll('.nav a').forEach(a => {
+  a.addEventListener('click', (e) => {
+    const href = a.getAttribute('href') || '';
+    // 外部页面链接（比如记忆星图）交给浏览器处理，不要被单页路由吃掉
+    if (!href.startsWith('#')) return;
+    e.preventDefault();
+    const id = href.slice(1);
+    history.replaceState(null, '', '#' + id);
+    showView(id);
+  });
+});
+showView((location.hash || '#overview').slice(1));
+
+document.getElementById('lightbox').onclick = () => document.getElementById('lightbox').classList.remove('on');
+if (sessionStorage.getItem(PWKEY)) {
+  const btn = document.getElementById('unlockbtn');
+  if (btn) { btn.textContent = '🔓 已解锁'; }
+  econLocked = false;
+}
+poll();
+setInterval(poll, 6000);
+</script>
+</body>
+</html>
