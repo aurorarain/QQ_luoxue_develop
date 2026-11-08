@@ -17,11 +17,25 @@ aside{display:grid;gap:13px;align-content:start}#detail{overflow-wrap:anywhere}#
 #neighbors,#results,#recent{display:grid;gap:5px;margin-top:9px;max-height:245px;overflow:auto}#neighbors button,#results button{text-align:left;overflow-wrap:anywhere}#recent article{padding:6px 0;border-top:1px solid var(--line);overflow-wrap:anywhere}#recent small{color:var(--muted)}
 #gate{max-width:410px;margin:9vh auto;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:24px}#gate form{display:grid;gap:10px;margin-top:12px}#gate-msg,#status{min-height:21px}.error{color:#ffaeaa}
 @media(max-width:840px){.workspace{grid-template-columns:1fr}main,header{padding:12px}nav{gap:9px}#chart{height:430px}}
+
+:root{--bg:#080a17;--surface:#15172a;--line:#333653;--ink:#f0ecff;--muted:#a6aac7;--cyan:#a1eee8}
+body{background:radial-gradient(ellipse at 25% 3%,#30224b 0%,#11172e 40%,var(--bg) 72%)}
+header{border-color:#ad9fd127}header .muted{color:#d5b9ed;letter-spacing:.14em;font-size:11px}
+h1{font-size:29px;letter-spacing:.06em}main{padding-top:24px}.workspace{gap:18px}
+.card{border-color:#b2a2da32;border-radius:19px;background:linear-gradient(155deg,#242039dc,#12172ce8);box-shadow:0 18px 48px #05061248}
+.toolbar h2{font-size:19px;color:#f2e6ff}.filters button{background:#15172e;font-size:12px}
+.chart-wrap{position:relative;border-radius:14px;overflow:hidden;border:1px solid #9ba4db31;background:radial-gradient(ellipse at 50% 47%,#252449,#0d1125 72%)}
+#chart{height:clamp(440px,62vh,660px);background:transparent;border-radius:0;touch-action:none;cursor:grab}
+#chart.dragging{cursor:grabbing}.graph-controls{position:absolute;right:9px;bottom:9px;display:flex;flex-wrap:wrap;gap:4px;max-width:calc(100% - 18px);justify-content:flex-end}
+.graph-controls button{padding:5px 9px;background:#13182eea;font-size:12px}.graph-controls button[aria-pressed=true]{background:#34436a}
+.chart-label{position:absolute;top:10px;left:12px;color:#b7b1d8;font-size:10px;letter-spacing:.19em;pointer-events:none}
+#gate{border-color:#b2a2da52;box-shadow:0 32px 100px #03041788}
+@media(max-width:840px){main{padding-top:12px}header{gap:7px;flex-wrap:wrap}h1{font-size:23px}#chart{height:415px}}
 </style>
 </head>
 <body>
 <header>
-  <div><div class="muted">独处与日常</div><h1>洛雪的大脑</h1></div>
+  <div><div class="muted">洛雪 · 心智观测</div><h1>记忆星海</h1></div>
   <nav aria-label="导航"><a href="/">房间</a><a href="/log.html">日志</a><a href="/console.html">控制台</a><button id="lock" hidden>锁定</button></nav>
 </header>
 <main>
@@ -34,8 +48,16 @@ aside{display:grid;gap:13px;align-content:start}#detail{overflow-wrap:anywhere}#
     <div class="toolbar"><div><h2>心智图谱</h2><p id="stats" class="muted"></p></div>
     <input id="search" type="search" aria-label="搜索脑图节点" placeholder="搜索记忆、计划和能力"></div>
     <div id="filters" class="filters" aria-label="脑区筛选"></div>
-    <canvas id="chart" aria-label="七个脑区的节点图谱，键盘可使用下方节点列表"></canvas>
-    <p class="muted" id="tooltip">选中节点可以查看详情和关联。</p>
+    <div class="chart-wrap">
+      <span class="chart-label">LUOXUE / MIND ATLAS</span>
+      <canvas id="chart" tabindex="0" aria-label="可旋转的七脑区图谱，方向键旋转，正负号缩放，零键复位"></canvas>
+      <div class="graph-controls" aria-label="图谱视角">
+        <button id="orbit" type="button" aria-pressed="true">旋转</button><button id="pan" type="button" aria-pressed="false">平移</button>
+        <button id="zoom-out" type="button" aria-label="缩小">−</button><button id="zoom-in" type="button" aria-label="放大">＋</button>
+        <button id="reset-view" type="button">复位</button>
+      </div>
+    </div>
+    <p class="muted" id="tooltip">拖动旋转 · 滚轮或双指缩放 · 右键或平移模式拖动</p>
     <p id="status" class="error" role="status"></p>
   </section>
   <aside aria-label="节点和活动">
@@ -66,7 +88,10 @@ const cv = $('chart'), ctx = cv.getContext('2d');
 const key = 'luoxue_brain_pw';
 let data, password, selected, hovered, region, timer, loading, generation = 0;
 let byId = new Map(), positions = new Map(), related = new Map(), matches = new Set();
-let width = 0, height = 0;
+let width = 0, height = 0, frame = 0, mode = 'orbit', moved = false;
+const initialView = {yaw:.15, pitch:-.16, zoom:1, x:0, y:0};
+const view = {...initialView}, pointers = new Map(), screen = new Map(), zones = new Map();
+const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 const fmt = t => t ? new Date(t * 1000).toLocaleString('zh-CN',{timeZone:'Asia/Shanghai',hour12:false}) : '—';
 const create = (tag,text) => Object.assign(document.createElement(tag),{textContent:text});
 function button(text, handler){ const el=create('button',text);el.type='button';el.onclick=handler;return el; }
@@ -74,58 +99,109 @@ function hash(value){let h=2166136261;for(const ch of value){h=Math.imul(h ^ ch.
 function layout(){
   if (!data || $('workspace').hidden) return;
   const rect=cv.getBoundingClientRect(), dpr=Math.min(2,devicePixelRatio || 1);
-  width=rect.width;height=rect.height;cv.width=width*dpr;cv.height=height*dpr;
-  ctx.setTransform(dpr,0,0,dpr,0,0);positions.clear();
-  const wide=width>=620;
-  const centers=wide ? [[.18,.22],[.82,.22],[.14,.53],[.50,.49],[.86,.53],[.25,.82],[.75,.82]]
-                     : [[.23,.15],[.76,.15],[.20,.42],[.51,.43],[.81,.42],[.23,.78],[.76,.78]];
+  width=rect.width;height=rect.height;cv.width=Math.round(width*dpr);cv.height=Math.round(height*dpr);
+  ctx.setTransform(dpr,0,0,dpr,0,0);positions.clear();zones.clear();
+  const anchors = width>=620
+    ? [[.20,.24,-.13],[.77,.22,.02],[.17,.52,.12],[.50,.49,.10],[.83,.53,-.05],[.29,.77,-.01],[.72,.76,.08]]
+    : [[.24,.22,-.10],[.75,.21,.02],[.20,.43,.10],[.51,.44,.07],[.80,.45,-.02],[.27,.71,-.02],[.75,.70,.04]];
+  const unit=Math.min(width,height);
   Object.keys(REGIONS).forEach((id,index)=>{
-    const [fx,fy]=centers[index], x=fx*width,y=fy*height;
+    const [fx,fy,fz]=anchors[index];
+    const x=(fx-.5)*width,y=(fy-.5)*height,z=fz*unit;
     const members=data.nodes.filter(n=>n.region===id).sort((a,b)=>hash(a.id)-hash(b.id));
-    const spread=Math.min(id==='memory'?width*.18:width*.115,id==='memory'?height*.22:height*.124);
+    const spread=unit*(id==='memory'?.205:.105);
+    zones.set(id,{x,y,z,spread});
     members.forEach((n,i)=>{
-      const radius=spread*Math.sqrt((i+.4)/Math.max(1,members.length));
-      const angle=i*2.399963;
-      positions.set(n.id,{x:x+radius*Math.cos(angle),y:y+radius*Math.sin(angle),
-        r:Math.max(1.5,(2+3.7*n.w)*(members.length>100?.73:1))});
+      const theta=i*2.399963, normal=1-2*(i+.5)/members.length;
+      const radius=spread*(.34+.66*Math.cbrt((hash(n.id)%991)/991));
+      const ring=Math.sqrt(1-normal*normal)*radius;
+      positions.set(n.id,{x:x+ring*Math.cos(theta),y:y+normal*radius*.77,z:z+ring*Math.sin(theta),
+        r:(2.1+3.5*n.w)*(members.length>100?.8:1)});
     });
   });
-  draw(centers);
+  draw();
 }
-function draw(centers){
+function projection(){
+  const cy=Math.cos(view.yaw),sy=Math.sin(view.yaw),cp=Math.cos(view.pitch),sp=Math.sin(view.pitch);
+  const camera=Math.max(width,height)*1.7;
+  return ({x,y,z})=>{
+    const horizontal=x*cy+z*sy, depth=z*cy-x*sy;
+    const vertical=y*cp-depth*sp, front=y*sp+depth*cp;
+    const scale=view.zoom*camera/(camera-front);
+    return {x:width/2+view.x+horizontal*scale,y:height/2+view.y+vertical*scale,z:front,scale};
+  };
+}
+function draw(){
+  if (!data || !width || frame) return;
+  frame=requestAnimationFrame(paint);
+}
+function paint(){
+  frame=0;
   if (!data || !width) return;
   ctx.clearRect(0,0,width,height);
-  const wide=width>=620;
-  centers ||= wide ? [[.18,.22],[.82,.22],[.14,.53],[.50,.49],[.86,.53],[.25,.82],[.75,.82]]
-                   : [[.23,.15],[.76,.15],[.20,.42],[.51,.43],[.81,.42],[.23,.78],[.76,.78]];
-  Object.entries(REGIONS).forEach(([id,[name,color]],i)=>{
-    const [fx,fy]=centers[i],x=fx*width,y=fy*height,r=Math.min(width*.21,height*.22);
-    const gradient=ctx.createRadialGradient(x,y,1,x,y,r);
-    gradient.addColorStop(0,color+'25');gradient.addColorStop(1,color+'00');
-    ctx.fillStyle=gradient;ctx.fillRect(x-r,y-r,r*2,r*2);
-    ctx.fillStyle=color;ctx.font='12px system-ui';ctx.textAlign='center';
-    ctx.fillText(name,x,y-Math.min(height*.14,width*(id==='memory'?.19:.13)));
-  });
-  const focused=related.get(selected) || [];
-  for(const bright of [false,true]){
+  const project=projection();
+  ctx.fillStyle='#bfc8f64c';
+  for(let i=0;i<150;i++){
+    const x=(hash('sx'+i)%1000)/1000*width,y=(hash('sy'+i)%1000)/1000*height;
+    ctx.fillRect(x,y,i%13===0?2:1,i%13===0?2:1);
+  }
+  screen.clear();
+  for(const [id,p] of positions) screen.set(id,{...project(p),r:p.r});
+  for(const [id,zone] of zones){
+    const [name,color]=REGIONS[id], p=project(zone), radius=zone.spread*p.scale*1.55;
+    const glow=ctx.createRadialGradient(p.x,p.y,0,p.x,p.y,radius);
+    glow.addColorStop(0,color+'37');glow.addColorStop(.48,color+'13');glow.addColorStop(1,color+'00');
+    ctx.fillStyle=glow;ctx.fillRect(p.x-radius,p.y-radius,radius*2,radius*2);
+    ctx.beginPath();
+    for(let i=0;i<=48;i++){
+      const angle=i*Math.PI/24;
+      const q=project({x:zone.x+zone.spread*1.12*Math.cos(angle),y:zone.y+zone.spread*.39*Math.sin(angle),
+                       z:zone.z+zone.spread*.68*Math.sin(angle)});
+      if(i===0) ctx.moveTo(q.x,q.y);else ctx.lineTo(q.x,q.y);
+    }
+    ctx.strokeStyle=color+'42';ctx.lineWidth=.8;ctx.stroke();
+    ctx.font='600 11px system-ui';ctx.textAlign='center';
+    const y=p.y-zone.spread*p.scale*.84-9, textWidth=ctx.measureText(name).width;
+    ctx.fillStyle='#111429e8';ctx.beginPath();ctx.roundRect(p.x-textWidth/2-7,y-12,textWidth+14,17,5);ctx.fill();
+    ctx.fillStyle=color;ctx.fillText(name,p.x,y);
+  }
+  for (const layer of ['same','cross','active']){
     ctx.beginPath();
     for (const edge of data.links){
-      const a=positions.get(edge.a),b=positions.get(edge.b);
+      const a=screen.get(edge.a),b=screen.get(edge.b);
+      if (!a || !b) continue;
       const active=!!selected && (edge.a===selected || edge.b===selected);
-      if (!a || !b || active!==bright) continue;
-      if (!active && (selected || !matches.has(edge.a) || !matches.has(edge.b))) continue;
+      if(active ? layer!=='active' : selected || !matches.has(edge.a) || !matches.has(edge.b) ||
+          layer!==(byId.get(edge.a).region===byId.get(edge.b).region?'same':'cross')) continue;
       ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);
     }
-    ctx.lineWidth=bright?1.5:.75;ctx.strokeStyle=bright?'#cdefffbb':'#96c6ec29';ctx.stroke();
+    ctx.lineWidth={same:.58,cross:.85,active:1.45}[layer];
+    ctx.strokeStyle={same:'#93aee321',cross:'#bbd1ff66',active:'#d8f8ffd0'}[layer];ctx.stroke();
   }
-  const neighbors=new Set(focused.map(link=>link.id));
-  for (const [id,p] of positions){
-    const n=byId.get(id), active=id===selected || id===hovered, near=neighbors.has(id);
-    ctx.globalAlpha=active || near ? 1 : matches.has(id) && !selected ? .35+n.w*.65 : .12;
-    ctx.fillStyle=REGIONS[n.region][1];ctx.beginPath();ctx.arc(p.x,p.y,p.r+(active?2:0),0,Math.PI*2);ctx.fill();
-    if(active){ctx.strokeStyle='#fff';ctx.beginPath();ctx.arc(p.x,p.y,p.r+5,0,Math.PI*2);ctx.stroke();}
+  const neighbors=new Set((related.get(selected)||[]).map(link=>link.id));
+  for (const [id,p] of [...screen].sort((a,b)=>a[1].z-b[1].z)){
+    const n=byId.get(id),active=id===selected || id===hovered,near=neighbors.has(id);
+    const color=REGIONS[n.region][1],r=clamp(p.r*Math.sqrt(p.scale),1.2,12);
+    ctx.globalAlpha=active || near ? 1 : matches.has(id) && !selected ? .30+n.w*.7 : .10;
+    ctx.fillStyle=color;ctx.beginPath();ctx.arc(p.x,p.y,r+(active?1.7:0),0,Math.PI*2);ctx.fill();
+    if(active || (n.w>.72 && matches.has(id))){
+      ctx.strokeStyle=active?'#f5f1ff':color+'7c';ctx.lineWidth=active?1.7:.9;
+      ctx.beginPath();ctx.arc(p.x,p.y,r+(active?5:2.5),0,Math.PI*2);ctx.stroke();
+    }
   }
   ctx.globalAlpha=1;
+}
+function zoom(factor, x=width/2, y=height/2){
+  const previous=view.zoom;
+  view.zoom=clamp(view.zoom*factor,.55,3.8);
+  const ratio=view.zoom/previous;
+  view.x=x-width/2-(x-width/2-view.x)*ratio;
+  view.y=y-height/2-(y-height/2-view.y)*ratio;
+  draw();
+}
+function setMode(value){
+  mode=value;
+  for(const id of ['orbit','pan']) $(id).setAttribute('aria-pressed',String(id===value));
 }
 function refreshMatches(){
   const query=$('search').value.trim().toLowerCase();
@@ -189,26 +265,88 @@ function render(){
 }
 function hit(e){
   const bounds=cv.getBoundingClientRect();let best=null, dist=14;
-  for(const [id,p] of positions){
+  for(const [id,p] of screen){
     if(!matches.has(id) && !related.get(selected)?.some(link=>link.id===id)) continue;
     const d=Math.hypot(e.clientX-bounds.left-p.x,e.clientY-bounds.top-p.y);
     if(d<dist){best=id;dist=d;}
   }
   return best;
 }
-cv.addEventListener('pointermove',e=>{
-  const id=hit(e);if(id===hovered)return;hovered=id;draw();
-  $('tooltip').textContent=byId.get(id)?.label||'选中节点可以查看详情和关联。';
+const guide='拖动旋转 · 滚轮或双指缩放 · 右键或平移模式拖动';
+function pointerPoint(e){return {x:e.clientX,y:e.clientY};}
+function gesture(){
+  const [a,b]=pointers.values();
+  return b ? {x:(a.x+b.x)/2,y:(a.y+b.y)/2,distance:Math.hypot(a.x-b.x,a.y-b.y)} : a;
+}
+let dragMode, lastGesture, startGesture;
+cv.addEventListener('pointerdown', e=>{
+  if(pointers.size===0){moved=false;dragMode=e.button===2||e.shiftKey?'pan':mode;}
+  pointers.set(e.pointerId,pointerPoint(e));cv.setPointerCapture(e.pointerId);
+  lastGesture=gesture();startGesture=lastGesture;
+  if(pointers.size>1) moved=true;
 });
-cv.addEventListener('pointerleave',()=>{hovered=null;$('tooltip').textContent='选中节点可以查看详情和关联。';draw();});
-cv.addEventListener('click',e=>select(hit(e),true));
+cv.addEventListener('pointermove', e=>{
+  if(!pointers.has(e.pointerId)){
+    if(pointers.size) return;
+    const id=hit(e);if(id===hovered)return;hovered=id;draw();
+    $('tooltip').textContent=byId.get(id)?.label||guide;
+    return;
+  }
+  pointers.set(e.pointerId,pointerPoint(e));const next=gesture();
+  const dx=next.x-lastGesture.x,dy=next.y-lastGesture.y;
+  moved ||= Math.hypot(next.x-startGesture.x,next.y-startGesture.y)>4;
+  if(moved){
+    hovered=null;cv.classList.add('dragging');
+    if(next.distance && lastGesture.distance){
+      const r=cv.getBoundingClientRect();zoom(next.distance/lastGesture.distance,next.x-r.left,next.y-r.top);
+      view.x+=dx;view.y+=dy;
+    }else if(dragMode==='pan'){
+      view.x+=dx;view.y+=dy;
+    }else{
+      view.yaw+=dx*.008;view.pitch=clamp(view.pitch+dy*.008,-1.45,1.45);
+    }
+    draw();
+  }
+  lastGesture=next;
+});
+function endPointer(e){
+  if(!pointers.delete(e.pointerId)) return;
+  lastGesture=gesture();
+  if(!pointers.size) cv.classList.remove('dragging');
+}
+for(const event of ['pointerup','pointercancel','lostpointercapture']) cv.addEventListener(event,endPointer);
+cv.addEventListener('pointerleave',()=>{hovered=null;$('tooltip').textContent=guide;draw();});
+cv.addEventListener('click',e=>{if(!moved)select(hit(e),true);});
+cv.addEventListener('contextmenu',e=>e.preventDefault());
+cv.addEventListener('wheel',e=>{
+  e.preventDefault();
+  const r=cv.getBoundingClientRect(), delta=e.deltaY*(e.deltaMode===1?16:e.deltaMode===2?height:1);
+  zoom(Math.exp(-clamp(delta,-450,450)*.0015),e.clientX-r.left,e.clientY-r.top);
+},{passive:false});
+$('orbit').onclick=()=>setMode('orbit');$('pan').onclick=()=>setMode('pan');
+$('zoom-in').onclick=()=>zoom(1.25);$('zoom-out').onclick=()=>zoom(.8);
+$('reset-view').onclick=()=>{Object.assign(view,initialView);setMode('orbit');draw();};
+cv.addEventListener('keydown',e=>{
+  if(!['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','+','=','-','0'].includes(e.key))return;
+  e.preventDefault();
+  if(e.key==='0') $('reset-view').click();
+  else if(e.key==='+'||e.key==='=') zoom(1.25);
+  else if(e.key==='-') zoom(.8);
+  else{
+    const dx=Number(e.key==='ArrowRight')-Number(e.key==='ArrowLeft');
+    const dy=Number(e.key==='ArrowDown')-Number(e.key==='ArrowUp');
+    if(e.shiftKey){view.x+=dx*20;view.y+=dy*20;}
+    else{view.yaw+=dx*.16;view.pitch=clamp(view.pitch+dy*.16,-1.45,1.45);}
+    draw();
+  }
+});
 $('close').onclick=()=>{select(null);$('search').focus();};
 $('search').oninput=()=>{select(null);refreshMatches();};
 addEventListener('keydown',e=>{if(e.key==='Escape' && selected)$('close').click();});
 new ResizeObserver(layout).observe(cv);
 function lock(message=''){
   generation++;loading=false;clearTimeout(timer);sessionStorage.removeItem(key);password=null;data=null;
-  byId.clear();related.clear();positions.clear();matches.clear();selected=hovered=region=null;
+  byId.clear();related.clear();positions.clear();screen.clear();zones.clear();matches.clear();pointers.clear();ctx.clearRect(0,0,width,height);Object.assign(view,initialView);setMode('orbit');selected=hovered=region=null;
   for(const id of ['title','fields','neighbors','recent','results','next','stats','filters','status','tooltip']) $(id).replaceChildren();
   $('search').value='';$('workspace').hidden=true;$('lock').hidden=true;$('gate').hidden=false;
   $('gate-msg').textContent=message;$('password').focus();

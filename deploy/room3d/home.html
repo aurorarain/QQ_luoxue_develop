@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>洛雪的家 · 鲸落小屋</title>
+<style>
+:root{color-scheme:dark;--text:#f7edf8;--muted:#c4b9d4;--line:#ddd2ed36;--panel:#171729dd;--mint:#bdebe6}
+*{box-sizing:border-box}body{margin:0;min-height:100vh;overflow:hidden;background:radial-gradient(ellipse at 51% 42%,#443651 0%,#231f39 54%,#111326 91%);color:var(--text);font:14px/1.5 system-ui,sans-serif}
+button,a{color:inherit;font:inherit}button{cursor:pointer}.view{position:fixed;inset:0;width:100%;height:100%;display:block;touch-action:none;cursor:grab}.view.dragging{cursor:grabbing}
+.hud{position:fixed;inset:0;pointer-events:none;display:flex;flex-direction:column;justify-content:space-between;padding:clamp(12px,2.5vw,32px);gap:14px}
+header,footer{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}footer{align-items:flex-end}
+.brand,.card,.toolbar,.nav{border:1px solid var(--line);background:var(--panel);backdrop-filter:blur(12px);box-shadow:0 15px 50px #08081740}
+.brand,.card{border-radius:18px;padding:13px 17px}h1,p{margin:0}h1{font-size:clamp(23px,2.3vw,37px);letter-spacing:.09em;font-weight:680}
+.eyebrow{font-size:10px;letter-spacing:.22em;color:#ddbddc}.dim{color:var(--muted)}.nav,.toolbar{display:flex;align-items:center;flex-wrap:wrap;border-radius:12px;padding:4px;gap:4px;pointer-events:auto}
+button,.nav a{border:1px solid transparent;border-radius:8px;background:transparent;text-decoration:none;padding:6px 9px;white-space:nowrap}
+button:hover,.nav a:hover,button[aria-pressed=true]{background:#b89de230;border-color:#d0b8ee5d}
+:focus-visible{outline:2px solid var(--mint);outline-offset:2px}.controls{display:grid;gap:6px;justify-items:end}.caption{font-size:11px;color:#d4c9df;text-shadow:0 2px 5px #080813}
+.card{width:min(276px,44vw);min-width:160px}.card strong{display:block;font-size:17px;color:#fff0e3}.line{display:flex;align-items:center;gap:7px;font-size:12px}.live{height:7px;width:7px;background:#b6f5d8;box-shadow:0 0 11px #90ffce60;border-radius:50%;flex:none}
+#connection[data-connected="false"] .live{background:#e9b997}.meter{margin-top:9px;height:5px;background:#302c46;border-radius:8px;overflow:hidden}.meter i{display:block;height:100%;background:linear-gradient(90deg,#b9a4ef,#f3baaf);border-radius:8px}
+#fallback{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);z-index:3;width:min(360px,90vw);text-align:center}.fallback-link{display:inline-block;margin-top:11px;color:var(--mint)}
+@media(max-width:660px){header,footer{gap:8px;flex-wrap:wrap}.nav a,.toolbar button{padding:5px 7px;font-size:12px}.brand,.card{padding:8px 11px}.hud{padding:10px}.controls{margin-left:auto;justify-items:start}.caption{display:none}}
+</style>
+<script type="importmap">{"imports":{"three":"/room3d/vendor/three.module.js"}}</script>
+</head>
+<body>
+<canvas id="scene" class="view" tabindex="0" aria-label="鲸落小屋，可拖动旋转，用滚轮缩放，方向键调整视角"></canvas>
+<div class="hud">
+  <header>
+    <div class="brand"><p class="eyebrow">LUOXUE · WHALEFALL LOFT</p><h1>鲸落小屋</h1><p class="dim" id="weather">洛雪的家</p></div>
+    <nav class="nav" aria-label="导航"><a href="/brain.html">大脑</a><a href="/log.html">日志</a><a href="/console.html">控制台</a><a href="/pixel-room.html">像素房间</a></nav>
+  </header>
+  <footer>
+    <section class="card" aria-label="洛雪实时状态">
+      <p class="line" id="connection" data-connected="false"><span class="live"></span><span id="connection-label">连接房间状态</span></p>
+      <strong id="activity">—</strong><p id="mood" class="dim"></p>
+      <div class="meter" id="energy" role="meter" aria-label="体力" aria-valuemin="0" aria-valuemax="100"><i></i></div>
+    </section>
+    <div class="controls">
+      <div class="caption">拖动旋转 · 双指或滚轮缩放 · 右键平移</div>
+      <div class="toolbar" aria-label="镜头">
+        <button type="button" id="room" aria-pressed="true">全景</button><button type="button" id="louxue" aria-pressed="false">看洛雪</button>
+        <button type="button" id="minus" aria-label="缩小">−</button><button type="button" id="plus" aria-label="放大">＋</button>
+        <button type="button" id="lighting" aria-pressed="false">暖灯</button>
+      </div>
+    </div>
+  </footer>
+</div>
+<div class="card" id="fallback" hidden><strong>3D 场景暂不可用</strong><p class="dim">可以从像素房间继续看洛雪。</p><a class="fallback-link" href="/pixel-room.html">打开像素房间</a></div>
+<script type="module">
+import('/room3d/loft.js').then(module=>module.mount()).catch(error=>{
+  console.error(error);
+  document.getElementById('fallback').hidden=false;
+});
+</script>
+</body>
+</html>
