@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>洛雪的家 · 鲸落小屋</title>
+<title>洛雪的家 · 3D 房间</title>
 <style>
 :root{color-scheme:dark;--text:#f7edf8;--muted:#c4b9d4;--line:#ddd2ed36;--panel:#171729dd;--mint:#bdebe6}
 *{box-sizing:border-box}body{margin:0;min-height:100vh;overflow:hidden;background:radial-gradient(ellipse at 51% 42%,#443651 0%,#231f39 54%,#111326 91%);color:var(--text);font:14px/1.5 system-ui,sans-serif}
@@ -25,16 +25,22 @@ button:hover,.nav a:hover,button[aria-pressed=true]{background:#b89de230;border-
 .rooms button{font-size:13px;padding:5px 11px}.rooms button[aria-current=true]{background:#bb9bdd45;border-color:#f2d7ff66;color:#fff4ff}
 #follow{color:#d6f5f2}.model-credit{pointer-events:auto;color:#ccc1df;font-size:10px}
 @media(max-width:660px){.hud-top{gap:6px}.rooms{justify-self:center;gap:2px;padding:3px}.rooms button{font-size:11px;padding:4px 6px}.model-credit{font-size:9px}.brand p.dim{font-size:11px}}
+
+#avatar-state{font-size:11px;color:#eed8f1;background:#1c1933dd;border:1px solid #b7a2cf55;pointer-events:auto}
+#door-menu{pointer-events:auto;display:flex;flex-wrap:wrap;gap:4px;padding:7px;background:#211c35ee;border:1px solid #b7a2cf55;border-radius:10px;max-width:320px}
+#door-menu[hidden]{display:none}
 </style>
 <script type="importmap">{"imports":{"three":"/room3d/vendor/three.module.js"}}</script>
+<link rel="stylesheet" href="/site.css?v=2">
+<script defer src="/site.js?v=2"></script>
 </head>
-<body>
-<canvas id="scene" class="view" tabindex="0" aria-label="鲸落小屋，可拖动旋转，用滚轮缩放，方向键调整视角"></canvas>
+<body class="site-home">
+<div data-site-nav="home"></div>
+<canvas id="scene" class="view" tabindex="0" aria-label="洛雪的家，可拖动旋转，用滚轮缩放，方向键调整视角"></canvas>
 <div class="hud">
   <div class="hud-top">
   <header>
-    <div class="brand"><p class="eyebrow">LUOXUE · WHALEFALL LOFT</p><h1>鲸落小屋</h1><p class="dim"><span id="room-name">客厅</span> · <span id="weather">洛雪的家</span></p></div>
-    <nav class="nav" aria-label="导航"><a href="/brain.html">大脑</a><a href="/log.html">日志</a><a href="/console.html">控制台</a><a href="/pixel-room.html">像素房间</a></nav>
+    <div class="brand"><p class="eyebrow">LUOXUE · HOME</p><h1>洛雪的家</h1><p class="dim"><span id="room-name">客厅</span> · <span id="weather">洛雪的家</span></p></div>
   </header>
   <div class="rooms" id="rooms" aria-label="房间导览">
     <button type="button" data-room="living" aria-current="true">客厅</button>
@@ -53,9 +59,18 @@ button:hover,.nav a:hover,button[aria-pressed=true]{background:#b89de230;border-
       <div class="meter" id="energy" role="meter" aria-label="体力" aria-valuemin="0" aria-valuemax="100"><i></i></div>
     </section>
     <div class="controls">
+      <button type="button" id="avatar-state" disabled>洛雪的形象正在载入…</button>
+      <div id="door-menu" aria-label="门后的房间" hidden>
+        <button type="button" data-destination="bedroom">卧室</button>
+        <button type="button" data-destination="study">书房</button>
+        <button type="button" data-destination="gaming">电竞房</button>
+        <button type="button" data-destination="garden">后花园</button>
+        <button type="button" data-destination="kitchen">厨房</button>
+      </div>
       <a id="model-credit" class="model-credit" href="https://vroid.pixiv.help/hc/en-us/articles/360014900113" target="_blank" rel="noopener noreferrer" hidden>3D 形象 · Vita / pixiv · CC0</a>
       <div class="caption">拖动旋转 · 双指或滚轮缩放 · 右键平移</div>
       <div class="toolbar" aria-label="镜头">
+        <button type="button" id="door">房门 · 选房间</button>
         <button type="button" id="room" aria-pressed="true">全景</button><button type="button" id="louxue" aria-pressed="false">看洛雪</button>
         <button type="button" id="minus" aria-label="缩小">−</button><button type="button" id="plus" aria-label="放大">＋</button>
         <button type="button" id="lighting" aria-pressed="false">暖灯</button>
@@ -65,7 +80,7 @@ button:hover,.nav a:hover,button[aria-pressed=true]{background:#b89de230;border-
 </div>
 <div class="card" id="fallback" hidden><strong>3D 场景暂不可用</strong><p class="dim">可以从像素房间继续看洛雪。</p><a class="fallback-link" href="/pixel-room.html">打开像素房间</a></div>
 <script type="module">
-import('/room3d/house/loft.js').then(module=>module.mount()).catch(error=>{
+import('/room3d/house-sync/loft.js').then(module=>module.mount()).catch(error=>{
   console.error(error);
   document.getElementById('fallback').hidden=false;
 });

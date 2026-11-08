@@ -34,14 +34,10 @@ TZ = ZoneInfo('Asia/Shanghai')
 SPLIT_MIN = 28
 SPLIT_MAX = 3
 
-# 洛雪的自我形象：鲸鱼娘 + 女仆装。任何"画你自己/自画像"的请求都从这里出发，
-# 不再让模型凭空猜她长什么样。
-SELF_IMAGE = ("鲸鱼娘：深蓝色长发、发根深海蓝过渡到发尾亮海蓝与浅青，头顶一根弧形呆毛，"
-              "戴白色层叠蕾丝女仆发箍、两侧各系亮蓝小蝴蝶结，头侧有一对深蓝鲸鱼鳍状耳朵；"
-              "身穿深蓝白色女仆裙，白色高领衬衫、深蓝蝴蝶结配椭圆蓝宝石，宽大白色围裙上印着蓝色小鲸鱼，"
-              "裙摆多层白蕾丝、点缀金色十字星与浅金小蝴蝶结，白色花边长袜配深蓝玛丽珍鞋；"
-              "身后一条厚实的深蓝鲸尾（尾巴），末端分成两片圆润尾鳍；日系动漫插画，Q 版三头身，软萌")
-SELF_PORTRAIT = re.compile(r'自画像|画你(?:自己)?|你自己长|你长什么|把你自己画|画你自己|画洛雪|画肥鱼|画一条肥鱼|自拍')
+from .presentation import AVATAR, HOME, location
+
+SELF_IMAGE = AVATAR
+SELF_PORTRAIT = re.compile(r'自画像|画你(?:自己)?|你自己长|你长什么|把你自己画|画洛雪|自拍')
 
 
 def is_self_portrait(text):
@@ -262,7 +258,7 @@ class Features:
                 '\n你能看到本次启用观察后送达的文字群消息；未读到的视频、图片、历史内容不能声称看过。'+
                 self.relationship_note(sender)+
                 self.public_mood_note()+
-                '\n你的形象是社区里那只蓝色大肥鱼（鲸鱼娘）：深蓝长发渐变海蓝、白色蕾丝女仆发箍、鲸鱼鳍耳朵、深蓝白女仆裙配印着小鲸鱼的白围裙、身后一条鲸尾，Q 版软萌。有人问“你长什么样”“画个你自己”就照这个说，不要编成普通人类少女。'+
+                ('\n你的当前外观：%s。家里的空间：%s' % (SELF_IMAGE, HOME))+
                 '\n普通回复默认不@任何人，被@也不需要回@。需要点名时**必须写出 [at:QQ号]**（用群成员名单里的真实QQ），只写名字不会变成真正的@，等于没点到；要同时点几个人就写几个[at:QQ号]，一次最多三个。名单里找不到对应QQ就直接说没找到，不要假装点过、也不要说“一次只能点一个人”这种不存在的限制。不要把@当回复前缀或礼貌格式。'+
                 '\n群里多半是玩笑和起哄：默认对方在逗你，先用一句短反应接梗再决定认不认真。不要要求对方解释或自证，不要复盘刚才那个梗来清算，也不要用“认账／交易／指控／验过了”这种口吻把玩笑办成公文。'+
                 self.meme_instructions(False)+
@@ -277,11 +273,7 @@ class Features:
     def room_description(self):
         """她能说清自己房间长什么样、东西都在哪。"""
         state = getattr(self.s, 'state', {}) or {}
-        parts = [
-            '你的房间：左边是床（浅紫床单、白枕头，床头有小夜灯），墙上一扇窗（有窗帘），',
-            '中间铺着暗紫色地毯，地毯边上常趴着一只灰猫，右边是沙发，最右是书架和电脑桌（两块屏幕），',
-            '角落里有一盏落地灯和一个小鱼缸。',
-        ]
+        parts = [HOME]
         props = [row.get('type') for row in state.get('room_props', [])]
         names = {'yogamat': '瑜伽垫', 'dumbbell': '哑铃', 'cushion': '抱枕',
                  'catstand': '猫爬架', 'fishbowl': '小鱼缸', 'guitar': '吉他',
@@ -291,9 +283,11 @@ class Features:
         return ''.join(parts)
 
     def public_mood_note(self):
-        state = self.s.state
-        return ('\n此刻体力约 %d，心情约 %d。把这些数值化进语气，别报数。'
-                % (round(_num(state.get('room_energy'), 60)), round(_num(state.get('room_mood_value'), 60))))
+        room = self.room_state()
+        stats = room['stats']
+        return ('\n此刻地点：%s，活动：%s；体力约 %d，心情约 %d。'
+                '被问起时以此为准，把数值化进语气。'
+                % (room['roomLabel'], room['activity'], stats['体力'], stats['心情']))
 
     def self_awareness(self):
         """把房间里的实时状态写进她的自我认知，并在小概率下提醒她可以改状态/签名。"""
@@ -306,9 +300,9 @@ class Features:
         wish = room.get('wish') or ''
         props = room.get('props') or []
         text = ('\n你现在的身心状态（实时，不是设定）：体力%d、心情%d、亲密%d、信任%d、兴致%d、睡意%d。'
-                '当前在做：%s。' % (stats.get('体力', 60), stats.get('心情', 60), stats.get('亲密', 60),
+                '当前位置：%s，正在：%s。' % (stats.get('体力', 60), stats.get('心情', 60), stats.get('亲密', 60),
                                     stats.get('信任', 60), stats.get('兴致', 50), stats.get('睡意', 40),
-                                    room.get('activity', '发呆')))
+                                    room.get('roomLabel', '家里'), room.get('activity', '发呆')))
         text += '\n' + self.room_description()
         outing = room.get('outing') or {}
         if outing:
@@ -1314,7 +1308,7 @@ class Features:
                     logger.warning('[luoxue_image] tool generation failed: %s',type(exc).__name__)
                     await event.send(MessageChain([Plain('这次没画出来——接口超时或报错了。')]));return False
                 self.spend_energy(7.0, '画完一张有点累')
-                note='' if not is_self_portrait(prompt) else '这是我自己的样子：蓝色大肥鱼，圆肚子，短鳍。'
+                note='' if not is_self_portrait(prompt) else '这是我的自画像。'
                 return await self.deliver_drawing(event,image,api.get('model','?'),final_prompt,
                                                   {'note':note,'plan_source':'model_tool'})
             finally:
@@ -1361,9 +1355,9 @@ class Features:
                     plan=await plan_drawing(self.s,self,text,private,images,model)
                     prompt=plan['prompt']
                     if is_self_portrait(text):
-                        # 她知道自己是谁：蓝色大肥鱼。
+                        # 自画像使用当前外观。
                         prompt=SELF_IMAGE+'。画面要求：'+prompt
-                        plan['note']='这是我自己的样子：蓝色大肥鱼。'
+                        plan['note']='这是我的自画像。'
                     image=await self._generate_with_cancel(api,prompt)
                 except DrawCancelled:
                     await event.send(MessageChain([Plain('好，停了，这张不画了。')]))
@@ -1843,7 +1837,7 @@ class Features:
     IDLE_ACTS = [
         ('刷贴吧', 'phone', 'sofa'), ('躺床上刷手机', 'phone', 'bed'), ('在电脑前看视频', 'type', 'desk'),
         ('趴床上发呆', 'lie', 'bed'), ('窝在沙发听歌', 'read', 'sofa'), ('翻零食吃', 'eat', 'sofa'),
-        ('整理表情包', 'type', 'desk'), ('靠着窗看夜景', 'phone', 'window'), ('抱着尾巴缩在沙发角', 'lie', 'sofa'),
+        ('整理表情包', 'type', 'desk'), ('靠着窗看夜景', 'phone', 'window'), ('抱着靠垫缩在沙发角', 'lie', 'sofa'),
         ('对着屏幕自言自语', 'type', 'desk'), ('把脸埋进抱枕里', 'lie', 'bed'),
         ('洗完头在窗边擦头发', 'phone', 'window'), ('在厨房煮点东西', 'eat', 'sofa'),
         ('给窗台的花浇水', 'phone', 'window'), ('蹲在沙发边撸猫', 'sit', 'sofa'),
@@ -2626,7 +2620,7 @@ class Features:
         """她对自己的完整认知：我是谁、我现在怎么样、我能做什么、我改过什么。"""
         state = self.s.state
         lines = []
-        lines.append('【我是谁】我是洛雪，一条住在人类屋子里的鲸鱼娘。说话嘴硬心软，'
+        lines.append('【我是谁】我是洛雪，也叫小洛雪。说话嘴硬心软，'
                      '喜欢被在意又不肯直说，怕吵也怕太安静。')
         traits = list(state.get('self_traits') or []) + [t for t in self.SELF_TRAITS
                                                           if t not in (state.get('self_traits') or [])]
@@ -3322,6 +3316,14 @@ class Features:
         return idle
 
     def room_state(self, now=None):
+        # Reading the current room must not advance the simulation.
+        if now is not None:
+            return self._build_room_state(now)
+        if getattr(self, '_room_snapshot', None) is None:
+            self._room_snapshot = self._build_room_state()
+        return self._room_snapshot
+
+    def _build_room_state(self, now=None):
         """网页房间的完整状态：作息、灯光、天气、活动、身心、钱包、外出。"""
         now = now or time.time()
         state = getattr(self.s, 'state', {}) or {}
@@ -3407,7 +3409,7 @@ class Features:
         mood_value = max(8.0, min(100.0, mood_value))
 
         if mood_value > 80:
-            mood = random.choice(['心情很好，想跟你分享点什么', '今天感觉什么都挺顺', '开心，尾巴都在晃'])
+            mood = random.choice(['心情很好，想跟你分享点什么', '今天感觉什么都挺顺', '开心，嘴角压不住'])
         elif mood_value > 66:
             mood = random.choice(['心情不错，想找人说话', '精神不错，想干点新鲜事'])
         elif mood_value > 50:
@@ -3450,8 +3452,16 @@ class Features:
                 life = dict(life, activity='在沙发上歇一会儿', action='idle', spot='sofa')
             elif now < brain.get('reading_until', 0):
                 life = dict(life, activity='在书桌边看书', action='read', spot='desk')
+        if mode in ('asleep', 'nap'):
+            mood = '睡得很安静'
+        if mode == 'awake' and not life.get('outing') and state.get('autonomy_enabled', True):
+            if now < brain.get('browsing_until', 0) and now >= max(brain.get('rest_until', 0), brain.get('reading_until', 0)):
+                life = dict(life, activity='在电脑前看贴吧', action='type', spot='desk')
+        motion = location(life.get('activity', '发呆'), life.get('action', 'idle'),
+                          life.get('spot', 'center'), mode, bool(life.get('outing')))
         return {
             'name': '洛雪', 'online': True, 'mood': mood, 'energy': round(energy),
+            'appearance': AVATAR, 'snapshotAt': now, **motion,
             'stats': stats,
             'activity': life.get('activity', '发呆'), 'action': life.get('action', 'idle'),
             'spot': life.get('spot', 'center'),
@@ -3461,7 +3471,7 @@ class Features:
             'outing': life.get('outing') or {},
             'recent': (state.get('room_activity') or {}).get('recent') or '没什么特别的',
             'messagesToday': messages,
-            'chips': ['鲸鱼娘', '女仆装', phase, '体力 %.0f%%' % energy],
+            'chips': [phase, '体力 %.0f%%' % energy],
             'log': [{'time': row.get('time', ''), 'text': row.get('text', '')} for row in log],
             'weather': {'kind': weather_kind, 'temp': weather.get('temp', 24),
                         'source': weather.get('source', '')},
@@ -3517,7 +3527,12 @@ class Features:
         try:
             path = Path(self.cfg.get('room_state_path') or '/AstrBot/data/room/state.json')
             path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text(json.dumps(self.room_state(), ensure_ascii=False, indent=1), encoding='utf-8')
+            snapshot = self._build_room_state()
+            tmp = path.with_suffix('.tmp')
+            tmp.write_text(json.dumps(snapshot, ensure_ascii=False, indent=1), encoding='utf-8')
+            tmp.replace(path)
+            self._room_snapshot = snapshot
+            self.s.save()
         except Exception as exc:
             logger.info('[luoxue_room] state write skipped: %s', type(exc).__name__)
 

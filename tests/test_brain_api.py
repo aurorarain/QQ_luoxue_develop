@@ -16,6 +16,8 @@ spec.loader.exec_module(room_api)
 class BrainProjection(unittest.TestCase):
     def test_real_state_shape_projects_stable_ids_and_attempt_outcomes(self):
         state = {
+            'persona_nodes': [{'id': 'sample', 'text': '喜欢安静', 'tags': ['日常']}],
+            'growth': {'ratified': [{'id': 'habit', 'active': True, 'trait': '记得先整理书桌'}]},
             'room_emotions': {'喜': 0, '怒': 30},
             'room_desires': {'听': 23},
             'interests': {'示例': 0.25},
@@ -34,6 +36,7 @@ class BrainProjection(unittest.TestCase):
         self.assertEqual(nodes['g_focus']['meta']['page'], 2)
         self.assertEqual(nodes['s_read']['meta']['attempts'], 2)
         self.assertEqual(nodes['s_read']['meta']['completed'], 1)
+        self.assertEqual(nodes['p_growth_habit']['label'], '记得先整理书桌')
         self.assertTrue(any(edge['kind'] == 'plan-action' for edge in data['links']))
         json.dumps(data, allow_nan=False)
 

@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>给洛雪一个贴吧身份</title>
+<style>
+  :root{--line:rgba(120,190,255,.2);--txt:#e6f1ff;--dim:#8aa4c2;--ok:#7ff0d0;--bad:#ff8f8f}
+  *{box-sizing:border-box}
+  body{margin:0;min-height:100vh;background:#070b12;color:var(--txt);
+    font-family:"Segoe UI","PingFang SC",system-ui,sans-serif;display:grid;place-items:center;padding:24px}
+  .card{width:min(680px,100%);background:rgba(14,20,32,.9);border:1px solid var(--line);
+    border-radius:16px;padding:22px 24px}
+  h1{font-size:16px;margin:0 0 6px;letter-spacing:1px}
+  p{font-size:12.5px;color:var(--dim);line-height:1.9;margin:0 0 14px}
+  ol{font-size:12.5px;color:#c6d8ef;line-height:2;margin:0 0 14px;padding-left:20px}
+  code{background:rgba(255,255,255,.07);padding:1px 6px;border-radius:5px;font-size:11.5px}
+  input,textarea{width:100%;background:rgba(255,255,255,.05);border:1px solid var(--line);
+    border-radius:10px;color:var(--txt);padding:9px 12px;font-size:12.5px;outline:none;
+    font-family:ui-monospace,Consolas,monospace}
+  textarea{min-height:110px;resize:vertical;line-height:1.7}
+  label{display:block;font-size:11.5px;color:var(--dim);margin:12px 0 5px}
+  button{margin-top:14px;background:rgba(127,240,208,.16);border:1px solid rgba(127,240,208,.4);
+    color:#dff6ef;border-radius:10px;padding:9px 18px;font-size:13px;cursor:pointer}
+  button:disabled{opacity:.5;cursor:default}
+  #msg{margin-top:12px;font-size:12.5px;min-height:20px}
+  .ok{color:var(--ok)}.bad{color:var(--bad)}
+  #nav{margin-top:16px;font-size:12px}
+  #nav a{color:#9fd8ff;text-decoration:none;margin-right:14px}
+</style>
+<link rel="stylesheet" href="/site.css?v=2">
+<script defer src="/site.js?v=2"></script>
+</head>
+<body class="site-page site-tool">
+<div data-site-nav="tieba"></div>
+<div class="card">
+  <h1>给洛雪一个贴吧身份</h1>
+  <p>百度把无头浏览器的扫码登录拦成了安全验证，所以改成<b>你登录一次、把 Cookie 交给我</b>。Cookie 存在服务器上，只用于她的贴吧阅读和发帖。</p>
+  <ol>
+    <li>电脑浏览器打开 <code>tieba.baidu.com</code>，确认已登录</li>
+    <li>按 <code>F12</code> → <b>Network</b> 标签 → 刷新页面</li>
+    <li>点第一条请求（通常是 <code>tieba.baidu.com</code> 本身）→ <b>Headers</b> → 找到 <b>Request Headers</b> 里的 <code>Cookie:</code></li>
+    <li>把 <code>Cookie:</code> 后面那一整串复制下来，粘到下面</li>
+  </ol>
+  <label for="pw">管理口令</label>
+  <input id="pw" type="password" placeholder="请输入管理口令">
+  <label for="cookie">Cookie</label>
+  <textarea id="cookie" placeholder="BAIDUID=...; BDUSS=...; STOKEN=...; （一整串）"></textarea>
+  <button id="save">保存给她</button>
+  <div id="msg"></div>
+  </div>
+<script>
+const msg = document.getElementById('msg');
+function say(text, cls) { msg.className = cls || ''; msg.textContent = text; }
+
+async function status() {
+  try {
+    const r = await fetch('/roomapi/tieba/status', { cache: 'no-store' });
+    const d = await r.json();
+    if (d.saved) say('已经有 Cookie 了（' + d.length + ' 字符，含 BDUSS：' + (d.hasBDUSS ? '是' : '否') + '）', 'ok');
+  } catch (e) {}
+}
+
+document.getElementById('save').onclick = async () => {
+  const pw = document.getElementById('pw').value.trim();
+  const cookie = document.getElementById('cookie').value.trim();
+  if (!pw || !cookie) { say('密码和 Cookie 都要填', 'bad'); return; }
+  const btn = document.getElementById('save');
+  btn.disabled = true; say('正在保存…');
+  try {
+    const r = await fetch('/roomapi/tieba/cookie', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Password': pw },
+      body: JSON.stringify({ cookie })
+    });
+    const d = await r.json();
+    if (d.ok) say('保存好了，她可以开始用贴吧身份了。', 'ok');
+    else say('没成功：' + (d.error || '未知错误'), 'bad');
+  } catch (e) {
+    say('请求失败：' + e.message, 'bad');
+  }
+  btn.disabled = false;
+};
+status();
+</script>
+</body>
+</html>

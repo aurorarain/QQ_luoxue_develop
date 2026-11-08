@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>洛雪 · 日志</title>
+<style>
+  :root{--line:rgba(120,190,255,.18);--txt:#e6f1ff;--dim:#7f97b6;--bg:#070b12}
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--txt);
+    font-family:"Segoe UI","PingFang SC",system-ui,sans-serif}
+  header{position:sticky;top:0;z-index:5;background:rgba(7,11,18,.92);backdrop-filter:blur(8px);
+    border-bottom:1px solid var(--line);padding:12px 18px;display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+  header h1{font-size:14px;margin:0;letter-spacing:2px;font-weight:600}
+  .filters{display:flex;gap:6px;flex-wrap:wrap}
+  .filters button{background:rgba(255,255,255,.04);border:1px solid var(--line);color:#b9cce6;
+    border-radius:999px;padding:4px 11px;font-size:11.5px;cursor:pointer}
+  .filters button.on{background:rgba(127,240,208,.16);color:#dff6ef;border-color:rgba(127,240,208,.4)}
+  .spacer{flex:1}
+  input#q{background:rgba(255,255,255,.05);border:1px solid var(--line);border-radius:8px;
+    color:var(--txt);padding:5px 10px;font-size:12px;outline:none;width:180px}
+  #count{font-size:11px;color:var(--dim)}
+  main{max-width:1000px;margin:0 auto;padding:16px 18px 60px}
+  .row{display:grid;grid-template-columns:52px 54px 1fr;gap:10px;padding:7px 0;
+    border-bottom:1px dashed rgba(120,190,255,.08);font-size:13px;line-height:1.75}
+  .row .t{color:var(--dim);font-size:11px;padding-top:2px}
+  .row .k{font-size:10.5px;padding-top:3px;letter-spacing:1px}
+  .k-think{color:#9fb0ff}.k-say{color:#7ff0d0}.k-hear{color:#8aa4c2}
+  .k-life{color:#ffd479}.k-edit{color:#ff9ec7}.k-learn{color:#8fd8ff}.k-browse{color:#c9a6ff}.k-state{color:#ffb27a}.k-room{color:#6f8db0}
+  .row .x{white-space:pre-wrap;word-break:break-word}
+  .row.think .x{color:#c3ccf2;font-style:italic}
+  .row.say .x{color:#e9f7f3}
+  #lock{position:fixed;inset:0;display:grid;place-items:center;background:var(--bg);z-index:20}
+  #lock input{margin-top:12px;background:rgba(255,255,255,.06);border:1px solid var(--line);
+    border-radius:9px;padding:7px 12px;color:#eaf3ff;font-size:13px;outline:none;width:150px}
+  #lock button{margin-top:10px;background:rgba(143,216,255,.16);border:1px solid rgba(150,200,255,.35);
+    border-radius:9px;padding:7px 16px;color:#dff0ff;cursor:pointer;font-size:12.5px}
+  #nav{position:fixed;right:18px;bottom:16px;display:flex;gap:8px;z-index:10}
+  #nav a{color:#d7e9ff;text-decoration:none;font-size:12px;padding:6px 12px;border-radius:10px;
+    border:1px solid var(--line);background:rgba(14,19,36,.8)}
+</style>
+<link rel="stylesheet" href="/site.css?v=2">
+<script defer src="/site.js?v=2"></script>
+</head>
+<body class="site-page site-log">
+<div data-site-nav="log"></div>
+<header>
+  <h1>洛雪 · 日志</h1>
+  <div class="filters" id="filters">
+    <button data-k="all" class="on">全部</button>
+    <button data-k="think">念头</button>
+    <button data-k="state">数值</button>
+    <button data-k="say">她说</button>
+    <button data-k="hear">她听</button>
+    <button data-k="life">人生</button>
+    <button data-k="edit">改自己</button>
+    <button data-k="browse">刷贴吧</button>
+    <button data-k="learn">学到</button>
+    <button data-k="room">日常</button>
+  </div>
+  <div class="spacer"></div>
+  <span id="count">载入中…</span>
+  <input id="q" type="search" name="luoxue-log-filter" autocomplete="off" spellcheck="false" placeholder="搜内容…">
+</header>
+<main id="list"></main>
+<div id="lock"><div style="text-align:center">
+  <div style="font-size:13px;color:#9fd8ff">日志需要密码</div>
+  <input id="pw" type="password" placeholder="密码">
+  <div><button id="go">进入</button></div>
+</div></div>
+
+<script>
+(() => {
+  const LABEL = { state: '数值', think: '念头', say: '她说', hear: '她听', life: '人生', edit: '改自己', browse: '刷贴吧', learn: '学到', room: '日常' };
+  let items = [], filter = 'all', keyword = '', timer = null;
+
+  const fmt = (ts) => {
+    const d = new Date(ts * 1000);
+    const now = new Date();
+    const sameDay = d.toDateString() === now.toDateString();
+    const hm = d.toTimeString().slice(0, 5);
+    return sameDay ? hm : (d.getMonth() + 1) + '/' + d.getDate() + ' ' + hm;
+  };
+
+  function render() {
+    const list = document.getElementById('list');
+    const rows = items.filter(it => {
+      if (filter !== 'all' && it.kind !== filter) return false;
+      if (keyword && !(it.text || '').includes(keyword)) return false;
+      return true;
+    });
+    document.getElementById('count').textContent = rows.length + ' 条 / 共 ' + items.length + ' 条';
+    if (!rows.length) {
+      const hint = keyword
+        ? '关键词「' + escapeHtml(keyword) + '」把记录都过滤掉了，清空搜索框看看。'
+        : '这个筛选下还没有记录';
+      list.innerHTML = '<div style="color:#6f8db0;padding:20px 0">' + hint + '</div>';
+      return;
+    }
+    const html = rows.slice().reverse().map(it => {
+      const k = it.kind;
+      return '<div class="row ' + k + '">' +
+        '<div class="t">' + fmt(it.at) + '</div>' +
+        '<div class="k k-' + k + '">' + (LABEL[k] || k) + '</div>' +
+        '<div class="x">' + escapeHtml(it.text) +
+        (it.target && it.target !== '自己想的' ? '<span style="color:#5f7896;font-size:10.5px"> · ' + escapeHtml(it.target) + '</span>' : '') +
+        '</div></div>';
+    }).join('');
+    list.innerHTML = html;
+  }
+
+  function escapeHtml(s) {
+    return String(s || '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  }
+
+  async function load(pwd) {
+    const r = await fetch('/roomapi/log?t=' + Date.now(), {
+      cache: 'no-store', headers: pwd ? { 'X-Password': pwd } : {}
+    });
+    if (!r.ok) return false;
+    const data = await r.json();
+    items = data.items || [];
+    document.getElementById('lock').style.display = 'none';
+    render();
+    return true;
+  }
+
+  document.getElementById('filters').addEventListener('click', e => {
+    const btn = e.target.closest('button');
+    if (!btn) return;
+    filter = btn.dataset.k;
+    document.querySelectorAll('#filters button').forEach(b => b.classList.toggle('on', b === btn));
+    render();
+  });
+  // 浏览器自动填充会把搜索框塞成用户名，进来先清空
+  const qEl = document.getElementById('q');
+  qEl.value = '';
+  qEl.setAttribute('autocomplete', 'off');
+  qEl.addEventListener('input', e => {
+    keyword = e.target.value.trim();
+    render();
+  });
+
+  document.getElementById('go').onclick = async () => {
+    const pwd = document.getElementById('pw').value.trim();
+    if (!pwd) return;
+    if (await load(pwd)) sessionStorage.setItem('luoxue_log_pw', pwd);
+    else alert('密码不对');
+  };
+
+  (async () => {
+    const saved = sessionStorage.getItem('luoxue_log_pw');
+    if (saved && await load(saved)) {
+      timer = setInterval(() => load(saved), 15000);
+    } else {
+      document.getElementById('lock').style.display = 'grid';
+    }
+  })();
+})();
+</script>
+</body>
+</html>

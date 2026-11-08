@@ -11,18 +11,16 @@ from luoxue_social.image_policy import is_draw_request
 
 class SelfPortraitDetection(unittest.TestCase):
     def test_self_portrait_phrases(self):
-        for text in ['画个自画像', '画你自己', '你长什么样', '把你自己画给我', '画洛雪', '画一条肥鱼']:
+        for text in ['画个自画像', '画你自己', '你长什么样', '把你自己画给我', '画洛雪']:
             self.assertTrue(is_self_portrait(text), text)
 
     def test_other_requests_are_not_self_portraits(self):
-        for text in ['画只猫', '画小猫', '今天好累', '画的不错']:
+        for text in ['画只猫', '画小猫', '画一条肥鱼', '今天好累', '画的不错']:
             self.assertFalse(is_self_portrait(text), text)
 
-    def test_self_image_describes_the_whale_maid(self):
-        self.assertIn('鲸鱼', SELF_IMAGE)
-        self.assertIn('女仆', SELF_IMAGE)
-        self.assertIn('尾巴', SELF_IMAGE)
-        self.assertIn('围裙', SELF_IMAGE)
+    def test_self_image_describes_current_appearance(self):
+        self.assertIn('银蓝短发', SELF_IMAGE)
+        self.assertIn('异色瞳', SELF_IMAGE)
 
 
 class GiveMePattern(unittest.TestCase):
@@ -65,7 +63,7 @@ class DrawToolPath(unittest.IsolatedAsyncioTestCase):
             ok = await f.draw_from_tool(event, '画个自画像')
         self.assertTrue(ok)
         prompt = f.deliver_drawing.await_args.args[3]
-        self.assertIn('鲸鱼', prompt)
+        self.assertIn('银蓝短发', prompt)
         self.assertIn(SELF_IMAGE[:12], prompt)
 
     async def test_tool_respects_group_quota(self):

@@ -26,15 +26,17 @@
 
 通用部署可通过 `LUOXUE_HOME` 指定 sidecar 数据根目录，通过 `LUOXUE_API` 指定媒体中继。天气坐标和可选音色标识从环境配置读取。
 
-## 记忆星海与鲸落小屋
+## 记忆星海与洛雪的家
 
 脑图在 Canvas 中以带景深的空间坐标投影七个脑区，旋转、缩放、平移与节点命中共享同一套投影。支持双指缩放、滚轮、键盘以及复位按钮。搜索、脑区筛选和详情仍使用受保护的同一份数据接口。
 
-`deploy/room3d/` 包含六个独立场景的页面和模块。站点将这些文件放在 /room3d/house/，首页与 /room3d/home.html 可以复用同一个 HTML。原像素首页可通过 /pixel-room.html 打开。页面使用站点的 Three.js r160（MIT）、GLTFLoader 及 @pixiv/three-vrm 3.0.0（MIT），由 /room3d/vendor/ 提供。
+`deploy/room3d/` 包含六个独立场景的页面和模块。站点将这些文件放在 /room3d/house-sync/，首页与 /room3d/home.html 可以复用同一个 HTML。原像素首页可通过 /pixel-room.html 打开。页面使用站点的 Three.js r160（MIT）、GLTFLoader 及 @pixiv/three-vrm 3.0.0（MIT），由 /room3d/vendor/ 提供。
 
-六个场景按需初始化，跟随模式从公开房间状态映射当前活动和位置，手动参观时只展示当前空间的家具。角色资产为 pixiv 的 Vita（β Ver AvatarSample_3，CC0）。部署时将上游模型文件 Vita.vrm 保存到 /room3d/assets/vita.vrm。模型加载失败时使用程序化鲸鱼娘模型。代码仓库无需附带模型文件。
+六个场景按需初始化，跟随模式从公开房间状态映射当前活动和位置，手动参观时只展示当前空间的家具。角色资产为 pixiv 的 Vita（β Ver AvatarSample_3，CC0）。部署时将上游模型文件 Vita.vrm 保存到 /room3d/assets/vita.vrm。首屏等待当前模型，失败时提供重试。代码仓库无需附带模型文件。
 
 - [pixiv 发布条款](https://vroid.pixiv.help/hc/en-us/articles/360014900113)
 - [Vita.vrm 源文件](https://github.com/madjin/vrm-samples/blob/master/vroid/beta/Vita.vrm)
 
-发布时先验收 /room3d/house/home.html 的 WebGL、房间切换、实时状态与模型加载，再切换首页。
+发布时先验收 /room3d/house-sync/home.html 的 WebGL、房门、共享导航、实时状态与模型加载，再切换首页。
+
+聊天、房间和控制台共享服务器发布的活动与外观快照。脑图使用同份快照中的情绪和需要，同时列出已确认的成长。房间按动作编号播放姿势；浏览者通过房门切换视角。

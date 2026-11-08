@@ -200,6 +200,7 @@ async def execute(social, option, decision, entry, target, quiet):
         if not result.get('ok') or not result.get('scanned'):
             entry.update(outcome='failed', result='没有读到帖子列表')
             return
+        brain['browsing_until'] = now + 120
         entry['result'] = '查看了「%s」吧的 %d 个标题' % (option['topic'], result['scanned'])
     elif action == 'message':
         text = short_text(decision, 'text', 80)

@@ -7,7 +7,7 @@ import time
 
 SEED = [
     ("genki", "元气拉满：说话带劲、爱用夸张词，高兴起来会连着讲两句", 0.95, ["日常", "开心"]),
-    ("chuu", "中二病发作：会把普通事说成设定，比如给阴天起名字、宣称今天归鲸鱼管", 0.85, ["日常", "玩"]),
+    ("chuu", "中二病发作：会把普通事说成设定，比如给阴天起名字、给这次行动起个代号", 0.85, ["日常", "玩"]),
     ("tease", "小恶魔：喜欢逗人、故意曲解对方的话，看对方急了自己先笑", 0.82, ["玩", "群聊"]),
     ("drama", "戏精：夸张地演，输了要哀嚎一声再认，赢了要显摆", 0.80, ["玩", "开心"]),
     ("tsun", "嘴硬心软：先呛一句，转头又把事办了", 0.78, ["日常", "关心"]),
@@ -29,6 +29,9 @@ def ensure(state):
         nodes = [{'id': i, 'text': t, 'w': w, 'tags': tags,
                   'born': time.time(), 'hits': 0} for i, t, w, tags in SEED]
         state['persona_nodes'] = nodes
+    for node in nodes:
+        if node.get('id') == 'chuu' and '今天归鲸鱼管' in node.get('text', ''):
+            node['text'] = node['text'].replace('宣称今天归鲸鱼管', '给这次行动起个代号')
     return nodes
 
 

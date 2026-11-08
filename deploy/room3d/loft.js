@@ -1,24 +1,24 @@
 import * as THREE from 'three';
 import {furnish} from './furniture.js';
 import {makeAvatar} from './avatar.js';
+import {DOOR_POSITION,makeDoor} from './doors.js';
 
 const names={living:'客厅',bedroom:'卧室',study:'书房',gaming:'电竞房',garden:'后花园',kitchen:'厨房'};
 const stand={living:[.60,0,.72],bedroom:[-.8,0,.31],study:[1.91,0,.71],gaming:[.56,0,-.66],
              garden:[.12,0,.39],kitchen:[1.33,0,-1.17]};
+const positions={
+  sleep:[-1.90,.90,-2.11],recline:[-1.90,.90,-2.11],
+  sit:[-3.0,-.48,1.19],listen:[-3.0,-.48,1.19],watch:[-3.0,-.48,1.19],
+  game:[.9,0,-1.05],browse:[.9,0,-1.05],wash:[.59,0,-1.65],cook:[2.44,0,-1.58],
+  eat:[-.69,0,2.03],water:[-2.6,0,-.36],pet:[-1.35,0,2.31],unpack:[-.37,0,2.57],
+  window:[-.10,0,-2.13],shelve:[3.86,0,-1.94],dress:[2.64,0,-1.55],
+};
 function locate(state){
-  const activity=String(state.activity||''),spot=state.spot;
-  if(['asleep','nap'].includes(state.sleepMode))return ['bedroom',[-1.90,.90,-2.11],'sleep'];
-  const reading=/看书|读书|阅读|翻书/.test(activity)||(!activity&&state.action==='read');
-  if(reading)return ['study',stand.study,'read'];
-  if(/做饭|煮|炒|下厨|洗碗|吃饭|零食|吃东西/.test(activity)||state.action==='eat')return ['kitchen',stand.kitchen,'idle'];
-  if(/浇花|浇水|花园|园艺/.test(activity))return ['garden',stand.garden,'idle'];
-  if(/书架|学习|写字|日记|画画/.test(activity)||spot==='shelf')return ['study',stand.study,'idle'];
-  if(/游戏|电竞|刷贴吧|打两把|电脑/.test(activity)||state.action==='type')return ['gaming',stand.gaming,'idle'];
-  if(spot==='desk')return ['study',stand.study,'idle'];
-  if(/睡觉|起床|床上|换衣|衣柜|趴床|躺床/.test(activity)||spot==='bed'||spot==='wardrobe')
-    return ['bedroom',stand.bedroom,'idle'];
-  if(spot==='sofa'||/沙发|歇一会/.test(activity))return ['living',[-3.00,-.48,1.19],'sit'];
-  return ['living',stand.living,'idle'];
+  if(state.away)return ['living',stand.living,'idle'];
+  // Transitional fallback for room snapshots written before the server projection was introduced.
+  if(!state.room && ['asleep','nap'].includes(state.sleepMode))return ['bedroom',positions.sleep,'sleep'];
+  const room=names[state.room]?state.room:'living',motion=state.motion||'idle';
+  return [room,positions[motion]||stand[room],motion];
 }
 const clamp=(v,low,high)=>Math.max(low,Math.min(high,v));
 const $=id=>document.getElementById(id);
@@ -36,8 +36,12 @@ export function mount(){
   const louxue=makeAvatar(avatarLayer,kind=>{
     canvas.dataset.model=kind;
     $('model-credit').hidden=kind!=='vrm';
+    $('avatar-state').hidden=kind==='vrm';
+    $('avatar-state').textContent=kind==='failed'?'形象加载失败，点击重试':'洛雪的形象正在载入…';
+    $('avatar-state').disabled=kind!=='failed';
   });
-  let currentRoom='living',actualRoom='living',following=true,active;
+  let currentRoom='living',actualRoom='living',following=true,active,receivedState=false,doorBusy=false;
+  const raycaster=new THREE.Raycaster();
   function roomFor(id){
     if(roomCache.has(id))return roomCache.get(id);
     const scene=new THREE.Scene();
@@ -45,7 +49,7 @@ export function mount(){
     const ambient=new THREE.HemisphereLight('#fdf0f7','#745a85',2.05);scene.add(ambient);
     const sun=new THREE.DirectionalLight('#ffe0c9',2.65);sun.position.set(1.9,7,4.6);scene.add(sun);
     const rim=new THREE.DirectionalLight('#bcb3ff',1.18);rim.position.set(-4,4,-2);scene.add(rim);
-    const room={scene,world,ambient,sun};
+    const room={scene,world,ambient,sun,door:makeDoor(scene,id==='garden')};
     roomCache.set(id,room);
     return room;
   }
@@ -93,7 +97,7 @@ export function mount(){
     panOffset.y=clamp(panOffset.y+dy*unit,-3,5);
   }
   const pointers=new Map();
-  let prior=null,right=false;
+  let prior=null,right=false,dragDistance=0;
   function gesture(){
     const [a,b]=pointers.values();
     return b?{x:(a.x+b.x)/2,y:(a.y+b.y)/2,d:Math.hypot(a.x-b.x,a.y-b.y)}:a;
@@ -107,6 +111,7 @@ export function mount(){
     if(!pointers.has(e.pointerId))return;
     pointers.set(e.pointerId,{x:e.clientX,y:e.clientY});
     const current=gesture(),dx=current.x-prior.x,dy=current.y-prior.y;
+    dragDistance+=Math.hypot(dx,dy);
     if(current.d&&prior.d){zoom(current.d/prior.d);pan(dx,dy);}
     else if(right)pan(dx,dy);
     else rotate(dx,dy);
@@ -120,6 +125,13 @@ export function mount(){
     zoom(Math.exp(-clamp(delta,-420,420)*.0014));
   },{passive:false});
   canvas.addEventListener('contextmenu',e=>e.preventDefault());
+  canvas.addEventListener('click',e=>{
+    if(dragDistance>7 || !active)return;
+    const rect=canvas.getBoundingClientRect();
+    raycaster.setFromCamera(new THREE.Vector2((e.clientX-rect.left)/rect.width*2-1,
+      1-(e.clientY-rect.top)/rect.height*2),camera);
+    if(raycaster.intersectObject(active.door.hit,false).length)openDoor();
+  });
   canvas.addEventListener('keydown',e=>{
     if(!['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','+','=','-','0'].includes(e.key))return;
     e.preventDefault();
@@ -136,10 +148,12 @@ export function mount(){
     const changed=currentRoom!==id || !active;
     currentRoom=id;active=roomFor(id);
     canvas.dataset.room=id;$('room-name').textContent=names[id];
+    $('door').textContent=id==='living'?'房门 · 选房间':'房门 · 回客厅';
+    if(changed){active.door.close();$('door-menu').hidden=true;}
     for(const item of $('rooms').querySelectorAll('[data-room]')){
       item.setAttribute('aria-current',String(item.dataset.room===id));
     }
-    avatarLayer.visible=!away && currentRoom===actualRoom;
+    avatarLayer.visible=receivedState && !away && currentRoom===actualRoom;
     if(avatarLayer.visible)active.scene.add(avatarLayer);
     if(changed)preset(false);
     lighting();
@@ -150,8 +164,29 @@ export function mount(){
   }
   $('rooms').addEventListener('click',event=>{
     const id=event.target.closest('[data-room]')?.dataset.room;
-    if(id){setFollow(false);show(id);}
+    if(id){setFollow(false);through(id);}
   });
+  function through(id,arrive){
+    if(id===currentRoom||doorBusy)return;
+    doorBusy=true;active.door.open();
+    setTimeout(()=>{
+      show(id);active.door.open();
+      if(arrive)arrive();
+      setTimeout(()=>{active.door.close();doorBusy=false;},350);
+    },reduce.matches?0:320);
+  }
+  function openDoor(){
+    if(currentRoom!=='living'){setFollow(false);through('living');return;}
+    active.door.open();
+    $('door-menu').hidden=!$('door-menu').hidden;
+    if($('door-menu').hidden)active.door.close();
+  }
+  $('door').onclick=openDoor;
+  $('door-menu').addEventListener('click',event=>{
+    const id=event.target.closest('[data-destination]')?.dataset.destination;
+    if(id){setFollow(false);through(id);}
+  });
+  $('avatar-state').onclick=()=>louxue.retry();
   $('follow').onclick=()=>setFollow(!following);
   $('room').onclick=()=>preset(false);
   $('louxue').onclick=()=>{setFollow(true);preset(true);};
@@ -178,7 +213,8 @@ export function mount(){
       $('energy').firstElementChild.style.width=energy+'%';
       $('connection').dataset.connected='true';
       const [id,position,pose]=locate(state);
-      const movedRoom=actualRoom!==id;
+      const movedRoom=actualRoom!==id, first=!receivedState;
+      receivedState=true;
       actualRoom=id;away=Boolean(state.away);sleeping=pose==='sleep';
       $('connection-label').textContent=away?'洛雪 · 外出中':'洛雪 · '+names[id];
       const weather=state.weather||{};
@@ -186,9 +222,19 @@ export function mount(){
       $('louxue').disabled=away;
       const newHour=parseInt(state.clock,10);
       if(Number.isFinite(newHour))hour=newHour;
-      louxue.poseAt(position,pose,movedRoom);
-      if(following&&!away)show(id);
-      else show(currentRoom);
+      canvas.dataset.motion=pose;
+      if(movedRoom&&!first&&following&&!away&&!reduce.matches){
+        louxue.poseAt(DOOR_POSITION,'stroll');
+        setTimeout(()=>{
+          if(!following||currentRoom===id){louxue.poseAt(position,pose,true);return;}
+          through(id,()=>{
+            louxue.poseAt(DOOR_POSITION,'stroll',true);
+            setTimeout(()=>louxue.poseAt(position,pose),90);
+          });
+        },500);
+      }else louxue.poseAt(position,pose,movedRoom||first);
+      if(following&&!away && (!movedRoom||first||reduce.matches))show(id);
+      else if(!following||away)show(currentRoom);
       if(away&&focus)preset(false);
     }catch{
       $('connection').dataset.connected='false';$('connection-label').textContent='房间状态暂未更新';
@@ -205,6 +251,7 @@ export function mount(){
     const t=now/1000;
     cameraPose(dt);louxue.update(t,dt,reduce.matches);
     if(!reduce.matches)active.world.animate(t);
+    active.door.update(dt,reduce.matches);
     renderer.render(active.scene,camera);
     if(!canvas.dataset.ready)canvas.dataset.ready='true';
   });

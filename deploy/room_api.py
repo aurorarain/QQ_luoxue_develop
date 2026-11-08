@@ -21,7 +21,7 @@ def list_files(pattern, limit=60):
 
 PUBLIC_KEYS = ('stats', 'mood', 'moodTags', 'activity', 'action', 'spot', 'away', 'awayRemain',
                'weather', 'phase', 'clock', 'date', 'weekday', 'season', 'sleepMode', 'illness',
-               'books', 'props', 'daylight', 'lights', 'body', 'online', 'messagesToday')
+               'books', 'props', 'daylight', 'lights', 'body', 'online', 'messagesToday', 'room', 'roomLabel', 'motion', 'appearance', 'snapshotAt')
 
 
 def public_payload():
@@ -272,6 +272,7 @@ ACTIVITY_NAMES = {'read': '阅读', 'browse': '浏览贴吧', 'rest': '休息',
 
 def brain_payload(bot=None, now=None):
     """Projection of stored state and verified heartbeat outcomes."""
+    room = read_json(STATE, {}) if bot is None else {}
     if bot is None:
         bot = read_json(BOT_STATE, {})
     now = time.time() if now is None else now
@@ -289,6 +290,12 @@ def brain_payload(bot=None, now=None):
     for row in bot.get('persona_nodes') or []:
         add('p_' + str(row['id']), 'persona', row.get('text'), row.get('w', 0.5),
             hits=row.get('hits', 0), tags=row.get('tags', []))
+
+    if room.get('appearance'):
+        add('p_appearance', 'persona', room['appearance'], 1, category='当前外观')
+    for row in (bot.get('growth') or {}).get('ratified', []):
+        if row.get('active'):
+            add('p_growth_' + str(row['id']), 'persona', row.get('trait'), .8, category='已确认成长')
 
     graph = bot.get('mem_graph') or {}
     indexed = {}
@@ -314,7 +321,8 @@ def brain_payload(bot=None, now=None):
             break
 
     for kind, key in (('情绪', 'room_emotions'), ('需要', 'room_desires')):
-        for name, value in (bot.get(key) or {}).items():
+        values = room.get('emotions' if kind == '情绪' else 'desires') or bot.get(key) or {}
+        for name, value in values.items():
             add('e_' + kind + name, 'emotion', name, float(value) / 100, value=value, category=kind)
 
     for qq, row in (bot.get('people') or {}).items():
@@ -364,7 +372,7 @@ def brain_payload(bot=None, now=None):
     persona = [node for node in nodes.values() if node['region'] == 'persona']
     for idx, a in enumerate(persona):
         for b in persona[idx + 1:]:
-            if set(a['meta']['tags']).intersection(b['meta']['tags']):
+            if set(a['meta'].get('tags', [])).intersection(b['meta'].get('tags', [])):
                 link(a['id'], b['id'], 'persona-tag', 0.45)
     memories = [node for node in nodes.values() if node['region'] == 'memory']
     for word, _ in interests[:20]:

@@ -32,8 +32,11 @@
   #lock input{width:160px;margin-top:12px}
   #lock button{margin-top:10px}
 </style>
+<link rel="stylesheet" href="/site.css?v=2">
+<script defer src="/site.js?v=2"></script>
 </head>
-<body>
+<body class="site-page site-runtime">
+<div data-site-nav="runtime"></div>
 <header>
   <h1>洛雪 · 运行日志</h1>
   <span id="stat">未连接</span>
@@ -44,11 +47,6 @@
   <button id="bottom">跳到底部</button>
 </header>
 <div id="log"></div>
-<div id="nav">
-  <a href="/">房间</a>
-  <a href="/log.html">她的日志</a>
-  <a href="/console.html">面板</a>
-</div>
 <div id="lock"><div style="text-align:center">
   <div style="font-size:13px;color:#9fd8ff">运行日志需要密码</div>
   <input id="pw" type="password" placeholder="密码">

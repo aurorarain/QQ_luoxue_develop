@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>洛雪 · STATE CONSOLE</title>
+<title>洛雪 · 控制台</title>
 <style>
   :root{
     --bg:#05080f;--panel:rgba(14,20,34,.86);--panel2:rgba(20,28,46,.9);
@@ -119,12 +119,15 @@
     main{padding:14px}
   }
 </style>
+<link rel="stylesheet" href="/site.css?v=2">
+<script defer src="/site.js?v=2"></script>
 </head>
-<body>
+<body class="site-page site-console">
+<div data-site-nav="console"></div>
 <aside>
   <div class="brand">
-    <img class="avatar" src="/assets/avatar.png?v=1" alt="">
-    <div><b>洛雪</b><span>STATE CONSOLE</span></div>
+    <img class="avatar" src="/assets/luoxue-current/portrait.png" alt="">
+    <div><b>洛雪</b><span>控制台</span></div>
   </div>
   <div class="navgroup">PROFILE 人物</div>
   <div class="nav">
@@ -153,9 +156,6 @@
   </div>
   <div class="navgroup">LOG 记录</div>
   <div class="nav">
-    <a href="/memories.html" target="_blank">✦ 记忆星图</a>
-    <a href="/log.html" target="_blank">✧ 她的日志</a>
-    <a href="/runtime.html" target="_blank">▣ 运行日志</a>
     <a href="#timeline">◇ 时间线</a>
     <a href="#diary">◇ 日记</a>
   </div>
@@ -165,17 +165,16 @@
     <a href="#topo">◇ 系统拓扑</a>
     <a href="#settings">◇ 设置</a>
   </div>
-  <div class="side-foot">人物、记忆与房子的统一管理<br>改动仅对本机生效</div>
+  <div class="side-foot">洛雪的活动、记忆与设置</div>
 </aside>
 
 <main>
   <header>
     <h1>洛雪</h1>
-    <span class="sub" id="subline">—</span>
+    <span class="sub" id="subline">—</span><span class="sub" id="room-live"></span>
     <div class="right">
       <span class="sub" id="clockline">--:--</span>
       <button class="btn" id="unlockbtn" onclick="askPassword()">🔒 解锁</button>
-      <a class="btn ghost" href="/">← 回到房间</a>
     </div>
   </header>
 
@@ -196,11 +195,11 @@
     <section class="card" id="persona">
       <h2>人格档案 <em>SELF</em></h2>
       <div class="kv"><span>称呼</span><b>洛雪</b></div>
-      <div class="kv"><span>身份</span><b>鲸鱼娘 · 女仆装</b></div>
+      <div class="kv"><span>身份</span><b>洛雪</b></div>
       <div class="kv"><span>性格</span><b>高贵又聪明，嘴硬心软</b></div>
 
       <div class="muted" style="margin-top:8px">
-        蓝黑色长发、白色蕾丝发箍、鲸鳍耳、深蓝白女仆裙、围裙上印着小鲸鱼、一条鲸尾。
+        <span id="live-appearance">正在同步当前外观…</span>
         说话有分寸，会撒娇也会嘴硬；被冷落会真的难过。
       </div>
     </section>
@@ -424,6 +423,8 @@ function renderDrawings(names) {
 function render() {
   const s = state, f = full || {};
   lockSections();
+  document.getElementById("room-live").textContent=[s.roomLabel,s.activity].filter(Boolean).join(" · ");
+  document.getElementById("live-appearance").textContent=s.appearance||"正在同步当前外观…";
   document.getElementById('clockline').textContent = (s.clock || '--:--') + ' · ' + (s.phase || '');
   document.getElementById('subline').textContent = (s.activity || '') +
     (s.weather ? (' · ' + s.weather.kind + ' ' + s.weather.temp + '℃') : '');
