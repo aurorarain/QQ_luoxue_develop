@@ -75,7 +75,7 @@ class Boundaries(unittest.IsolatedAsyncioTestCase):
 
     async def test_group_fallback_replaces_private_persona(self):
         social=main.Social.__new__(main.Social)
-        async def web_context(text):return ''
+        async def web_context(text,channel='',sender='',umo=None):return ''
         social.features=types.SimpleNamespace(public_instructions=lambda sender:'PUBLIC_CAPABILITIES',web_context=web_context)
         social.state={}
         social.group_memory=lambda text:[{'text':'public record'}]

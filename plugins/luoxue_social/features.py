@@ -264,7 +264,7 @@ class Features:
                 self.meme_instructions(False)+
                 self.drawing_context(False)+
                 '\n描述画面不等于已经出图：只有插件真的生成并发送了图片才算你画了。如果你只是在讲构思，就直接说“说一句‘画一张……’我就画”，不要把方案说成画好了，也不要让群友以为图已经发出来了。'+
-                '\n事实类问题（门店、价格、营业时间、路线、新闻、赛事）先看本轮注入的公开搜索结果：有结果就用并给出来源；没有就直说“我这次没查到实时信息”，不要只给一长串通用建议，也不要说自己完全没有查的能力——能不能查由插件决定，你只管用给到的结果。'+
+                '\n是否联网由你结合对话、当下的好奇心与剩余额度自主决定，本轮决定和执行记录会给到你。不查就正常接话，不必汇报；没有核实实时事实就坦诚未核实，不装作刚查过。有实际来源再引用；某次没找到不代表你不会搜索。每日和每月的上限、已用和剩余次数以当前真实运行状态为准，系统不允许越限。'+
                 '\n你有真实语音能力（Fish AD学姐音色），识别到“用语音/发语音/喊我一句”这类请求时由插件合成并发送语音；不要说自己发不出语音，也不要承诺一定成功。'+
                 '\n你的真实运行状态（按当前时刻计算，不是固定宣传语）：'+json.dumps(self.self_status(),ensure_ascii=False)+
                 (('\n你已经唱过并保存下来的成品（有人点这些就直接放，不要重新生成）：'+
@@ -653,8 +653,9 @@ class Features:
         usage=self.s.state.get('image_usage',{}) or {}
         drawn=usage.get('group_count',0) if usage.get('day')==today else 0
         cap=int(image.get('group_daily_limit',20) or 20)
-        from .web_search import settings as search_settings, PROVIDERS
+        from .web_search import settings as search_settings, PROVIDERS, budget_status
         search_config=search_settings(self)
+        search_budget=budget_status(self)
         web=self.s.state.get('web_usage_v2',{}) or {}
         web_today=dt.datetime.now(ZoneInfo('Asia/Shanghai')).strftime('%Y-%m-%d')
         searched=web.get('count',0) if web.get('day')==web_today else 0
@@ -668,15 +669,15 @@ class Features:
                 'vision':'能看本轮随消息附带的图片（最多2张）',
                 'drawing':f'{image.get("model") or "wan2.6-t2i"}；群友今天 {drawn}/{cap} 张，老大不限量',
                 'memory':'和老大私聊有长期记忆/画像/日记；群里只记公开聊天，不读私聊',
-                'search':(f"{PROVIDERS[search_config['provider']]} 内置搜索，今日预留 {searched}/{search_config['daily_limit']} 次" if search_config['key'] else '内置搜索尚未配置密钥，暂不可用'),
+                'search':(f"{PROVIDERS[search_config['provider']]} 内置搜索，今日预留 {searched}/{search_config['daily_limit']} 次，今日剩余 {search_budget['daily_remaining']} 次；本月预留 {search_budget['monthly_used']}/{search_budget['monthly_limit']} 次，剩余 {search_budget['monthly_remaining']} 次" if search_config['key'] else '内置搜索尚未配置密钥，暂不可用'),
                 'stickers':f'{len(self.index)} 张本地表情',
                 'qzone':'能发说说、点赞、评论（接口成功不等于客户端可见）',
                 'singing':'还不能唱歌（缺曲库和RVC）',
                 'limits':'没有Shell、任意文件、配置或插件安装权限'}
 
-    async def web_context(self,text):
+    async def web_context(self,text,channel='',sender='',umo=None):
         from .web_search import automatic_context
-        return await automatic_context(self,text)
+        return await automatic_context(self,text,channel,sender,umo)
 
     def drawing_context(self,private):
         rows=[{k:x.get(k) for k in ('created_at','prompt','model','generated','delivered','plan_source','review','source')}

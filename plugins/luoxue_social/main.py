@@ -938,7 +938,7 @@ class Social(Star):
                 PUBLIC + self.features.public_instructions(sender) +
                 ('\n如果这条消息和你没关系、你也不想接话，就只输出 [SKIP]，不要解释。') +
                 self.clock_context('group')+
-                await self.features.web_context(text)+attachment_note(len(images))+wanted_hint, event.unified_msg_origin,
+                await self.features.web_context(text,'group',sender,event.unified_msg_origin)+attachment_note(len(images))+wanted_hint, event.unified_msg_origin,
                 image_urls=images or None)
             from .output_guard import chat_text
             reply = chat_text(reply)
@@ -1075,7 +1075,7 @@ class Social(Star):
         req.system_prompt += self.companion.mood(text)+self.companion.atmosphere(text)+self.companion.diary_context()
         from .growth import context as growth_context
         req.system_prompt += growth_context(self)
-        req.system_prompt += self.clock_context('private')+await self.features.web_context(text)
+        req.system_prompt += self.clock_context('private')+await self.features.web_context(text,'private',str(event.get_sender_id()),event.unified_msg_origin)
         req.system_prompt += self.features.self_awareness()
         req.system_prompt += cognition.private_context(self.state, text, time.time())
         _sleep_note = getattr(self.features, 'sleep_note', None)
@@ -1090,7 +1090,7 @@ class Social(Star):
         if not event.is_private_chat() and str(event.get_group_id())==GROUP:
             req.system_prompt=PUBLIC+self.features.public_instructions(str(event.get_sender_id()))
             req.system_prompt+='\n仅公开群记录：'+json.dumps(self.group_memory(event.get_message_str()),ensure_ascii=False)
-            req.system_prompt+=self.clock_context('group')+await self.features.web_context(event.get_message_str() or '')
+            req.system_prompt+=self.clock_context('group')+await self.features.web_context(event.get_message_str() or '', 'group', str(event.get_sender_id()),event.unified_msg_origin)
             try:
                 gap = time.time() - float(_GROUP_LAST_BOT.get('at', 0))
                 if gap < 180 and _GROUP_LAST_BOT.get('text'):
