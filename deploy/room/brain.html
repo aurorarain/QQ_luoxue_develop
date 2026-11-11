@@ -29,8 +29,23 @@ h1{font-size:29px;letter-spacing:.06em}main{padding-top:24px}.workspace{gap:18px
 #chart.dragging{cursor:grabbing}.graph-controls{position:absolute;right:9px;bottom:9px;display:flex;flex-wrap:wrap;gap:4px;max-width:calc(100% - 18px);justify-content:flex-end}
 .graph-controls button{padding:5px 9px;background:#13182eea;font-size:12px}.graph-controls button[aria-pressed=true]{background:#34436a}
 .chart-label{position:absolute;top:10px;left:12px;color:#b7b1d8;font-size:10px;letter-spacing:.19em;pointer-events:none}
+.cognition-card{grid-column:1/-1;display:grid;grid-template-columns:1.2fr 1fr;gap:16px}
+.cognition-title{display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-bottom:10px}
+.cognition-title small{color:var(--muted)}
+.signal-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:7px}
+.signal{min-width:0;background:#13182a;border:1px solid #8ba5dc30;border-radius:10px;padding:7px 9px}
+.signal small{display:block;color:#c6c4dc;font-size:11px}.signal strong{font-size:19px;font-variant-numeric:tabular-nums;color:var(--signal)}
+.signal-track{height:3px;margin-top:4px;position:relative;background:#53527055;border-radius:3px}.signal-track i{display:block;height:100%;border-radius:3px;background:var(--signal)}
+.affect-graph{width:100%;height:52px;display:block;overflow:visible}
+.affect-graph line{stroke:#c8baff45;stroke-dasharray:3 4}.affect-graph polyline{fill:none;stroke:#e0b4ff;stroke-width:2;vector-effect:non-scaling-stroke}
+.affect-graph circle{fill:#e0b4ff}
+#episodes,#learned{display:grid;gap:7px;margin-top:8px}#episodes article{padding:6px 0;border-top:1px solid var(--line)}
+#episodes small,#learned small{color:var(--muted)}#episodes article p{overflow-wrap:anywhere}#learned li{display:flex;justify-content:space-between;gap:8px;list-style:none}#learned{padding:0}
+.mind-levels{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0 13px}.mind-levels span{padding:2px 7px;border-radius:7px;border:1px solid var(--line);background:#181c32;font-variant-numeric:tabular-nums}
+#reflection-list article{border-top:1px solid var(--line);padding:8px 0;overflow-wrap:anywhere}
 #gate{border-color:#b2a2da52;box-shadow:0 32px 100px #03041788}
 @media(max-width:840px){main{padding-top:12px}header{gap:7px;flex-wrap:wrap}h1{font-size:23px}#chart{height:415px}}
+@media(max-width:700px){.cognition-card{grid-template-columns:1fr;gap:10px}.signal-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 </style>
 <link rel="stylesheet" href="/site.css?v=2">
 <script defer src="/site.js?v=2"></script>
@@ -47,6 +62,19 @@ h1{font-size:29px;letter-spacing:.06em}main{padding-top:24px}.workspace{gap:18px
   <form><label for="password">管理口令</label><input id="password" type="password" required autocomplete="current-password"><button>进入</button><p class="error" id="gate-msg" role="status"></p></form>
 </section>
 <div id="workspace" class="workspace" hidden>
+  <section class="card cognition-card" aria-label="情绪与经历">
+    <div>
+      <div class="cognition-title"><h2>此刻的感受</h2><small id="cognition-at"></small></div>
+      <div class="signal-grid" id="signals"></div>
+    </div>
+    <div>
+      <div class="cognition-title"><h2>经历留下的心情变化</h2><small id="consolidation"></small></div>
+      <svg class="affect-graph" viewBox="0 0 360 56" role="img" aria-label="按经历顺序记录的心情偏移" preserveAspectRatio="none">
+        <line x1="4" x2="356" y1="28" y2="28"></line><polyline id="affect-line"></polyline><circle id="affect-point" r="2.7" hidden></circle>
+      </svg>
+      <p class="muted" id="affect-caption"></p>
+    </div>
+  </section>
   <section class="card" aria-label="心智图谱">
     <div class="toolbar"><div><h2>心智图谱</h2><p id="stats" class="muted"></p></div>
     <input id="search" type="search" aria-label="搜索脑图节点" placeholder="搜索记忆、计划和能力"></div>
@@ -69,6 +97,14 @@ h1{font-size:29px;letter-spacing:.06em}main{padding-top:24px}.workspace{gap:18px
       <dl id="fields"></dl><h3>关联节点</h3><div id="neighbors"></div>
     </section>
     <section class="card"><h2>独处活动</h2><p class="muted" id="next"></p><div id="recent"></div></section>
+    <section class="card"><h2>最近记下的经历</h2><div id="episodes"></div></section>
+    <section class="card"><h2>从结果学到的偏好</h2><ul id="learned"></ul></section>
+    <section class="card"><h2>她怎样消化经历</h2>
+      <h3 class="muted">情绪分量</h3><div id="emotion-levels" class="mind-levels"></div>
+      <h3 class="muted">六欲满足度 · 越低表示越想满足</h3><div id="need-levels" class="mind-levels"></div>
+      <h3>独处时的重新理解</h3><div id="reflection-list"></div>
+    </section>
+    <section class="card"><h2>本轮为什么这么选</h2><p id="rule-reason" class="muted"></p><div id="rule-scores"></div></section>
     <section class="card"><h2 id="list-title">节点列表</h2><div id="results"></div></section>
   </aside>
 </div>
@@ -83,10 +119,11 @@ const REGIONS = {
 const LABELS = {at:'记下于',role:'人物',w:'权重',imp:'重要度',retention:'保真度',stability:'稳定性（天）',
   hits:'强化次数',kws:'关键词',tags:'标签',value:'当前值',category:'类别',count:'公开记录条数',
   last:'最近时间',weight:'兴趣权重',enabled:'已开启',attempts:'近 60 轮记录',completed:'完成次数',
-  due:'到期时间',page:'已读页数',total:'总页数'};
-const ACTION = {read:'阅读',browse:'浏览',rest:'休息',message:'主动私聊',none:'静观'};
-const OUTCOME = {done:'完成',idle:'安静',blocked:'跳过',failed:'失败',running:'执行中',interrupted:'中断'};
-const LINK = {'plan-action':'计划所用能力','memory-keyword':'共同关键词','persona-tag':'共有标签','interest-memory':'兴趣词匹配'};
+  due:'到期时间',page:'已读页数',total:'总页数',cues:'回忆线索',pleasant:'感受',surprise:'奖赏预测误差',consolidated:'已巩固'};
+const ACTION = {read:'阅读',browse:'浏览',rest:'休息',stretch:'舒展',water:'照顾植物',message:'主动私聊',none:'静观'};
+const OUTCOME = {done:'完成',idle:'安静',blocked:'跳过',failed:'失败',running:'执行中',scheduled:'已开始',interrupted:'中断'};
+const LINK = {'plan-action':'计划所用能力','memory-keyword':'共同关键词','persona-tag':'共有标签','interest-memory':'兴趣词匹配',
+  'episode-affect':'经历影响情绪','episode-reward':'结果与期待的差','episode-action':'动作留下经历'};
 const cv = $('chart'), ctx = cv.getContext('2d');
 const key = 'luoxue_brain_pw';
 let data, password, selected, hovered, region, timer, loading, generation = 0;
@@ -234,7 +271,65 @@ function select(id,scroll=false){
   if(scroll && innerWidth<=840) $('detail').scrollIntoView({block:'nearest'});
   draw();
 }
+function renderCognition(brain){
+  const signals=brain?.signals||{}, rows=brain?.episodes||[], activity=brain?.activity||[];
+  const reflections=brain?.reflections||[];
+  const specs=[['valence','心情偏移','#e3baff',true],['arousal','唤醒程度','#ffd094',false],
+    ['prediction','奖赏预测误差','#a0eee5',true],['stress','压力反应','#ff9fad',false]];
+  const signed=value=>(value>0?'+':'')+value.toFixed(1);
+  $('cognition-at').textContent=brain?.at?'模拟信号 · '+fmt(brain.at):'等待状态更新';
+  $('consolidation').textContent='睡眠巩固 '+(brain?.consolidated||0)+' 条';
+  $('signals').replaceChildren(...specs.map(([key,name,color,showSign])=>{
+    const card=create('div',''), value=signals[key];
+    card.className='signal';card.style.setProperty('--signal',color);
+    const track=create('div',''),fill=create('i','');track.className='signal-track';track.append(fill);
+    fill.style.width=Number.isFinite(value)?clamp(Math.abs(value)/40*100,0,100)+'%':'0%';
+    card.append(create('small',name),create('strong',Number.isFinite(value)?(showSign?signed(value):value.toFixed(1)):'—'),track);
+    return card;
+  }));
+  const series=[...rows,...reflections].sort((a,b)=>a.at-b.at);
+  const points=series.map((row,index)=>[4+352*index/Math.max(1,series.length-1),28-clamp(row.mood||0,-40,40)*.61]);
+  $('affect-line').setAttribute('points',points.map(point=>point.join(',')).join(' '));
+  const end=points[points.length-1], marker=$('affect-point');
+  marker.toggleAttribute('hidden',!end);
+  if(end){marker.setAttribute('cx',end[0]);marker.setAttribute('cy',end[1]);}
+  $('affect-caption').textContent=series.length?'近期经历与回想 · 中线为平静基准':'有具体经历后，才会出现变化记录';
+  $('episodes').replaceChildren(...rows.slice(-6).reverse().map(row=>{
+    const el=create('article','');
+    el.append(create('p',row.label),create('small',[fmt(row.at),...(row.cues||[]),row.consolidated?'已巩固':''].filter(Boolean).join(' · ')));
+    return el;
+  }));
+  if(!rows.length) $('episodes').append(create('small','还没有可展示的情景记忆。'));
+  $('learned').replaceChildren(...activity.map(row=>{
+    const el=create('li','');
+    el.append(create('span',row.label),create('small',signed(row.score*100)+' · '+row.count+' 次'));
+    return el;
+  }));
+  if(!activity.length) $('learned').append(create('li','等待已执行活动的反馈。'));
+  for(const [id,values] of [['emotion-levels',brain?.emotions],['need-levels',brain?.needs]]){
+    $(id).replaceChildren(...Object.entries(values||{}).map(([name,value])=>create('span',name+' '+Math.round(value))));
+  }
+  $('reflection-list').replaceChildren(...reflections.slice().reverse().map(row=>{
+    const article=create('article','');
+    article.append(create('strong',row.feeling+' · '+row.need),create('p',row.note||'回想后心情有了变化。'),
+      create('small',fmt(row.at)));
+    return article;
+  }));
+  if(!reflections.length) $('reflection-list').append(create('small','等她在独处时自己想起一件事。'));
+  const decision=brain?.decision;
+  $('rule-reason').textContent=decision?fmt(decision.at)+' · '+(ACTION[decision.action]||decision.action)+' · '+decision.reason:'等待下一轮规则检查';
+  $('rule-scores').replaceChildren(...(decision?.scores||[]).slice(0,4).map(row=>{
+    const line=create('p','');
+    line.append(create('strong',row.label+' '+row.score+' 分'),create('small',' · 基础 '+row.base+' / 等待 +'+row.due+
+      ' / 经验 '+signed(row.preference)+(row.continuity?' / 续做 +'+row.continuity:'')+
+      (row.suitability?' / 状态 +'+row.suitability:'')+(row.needBonus?' / 需要 +'+row.needBonus:'')+
+      (row.required?' · 到期优先':'')));
+    return line;
+  }));
+}
+
 function render(){
+  renderCognition(data.cognition);
   byId=new Map(data.nodes.map(n=>[n.id,n]));related=new Map();
   for(const edge of data.links){
     if(!byId.has(edge.a)||!byId.has(edge.b)) continue;

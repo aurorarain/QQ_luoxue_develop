@@ -84,15 +84,15 @@ class VoiceAndStatus(unittest.IsolatedAsyncioTestCase):
 
     async def test_self_status_reports_runtime_facts(self):
         f = features.Features.__new__(features.Features)
-        f.cfg = {'image_api': {'model': 'wan2.6-t2i', 'group_daily_limit': 20}}
+        f.cfg = {'image_api': {'model': 'wan2.6-t2i', 'group_daily_limit': 20}, 'web_search': {'tavily_api_key': 'SYNTHETIC_TOKEN'}}
         f.index = [{'sha': 'x'}]
         f.s = type('S', (), {'state': {'image_usage': {'day': __import__('time').strftime('%Y-%m-%d'), 'group_count': 7},
-                                       'web_usage': {'day': __import__('time').strftime('%Y-%m-%d'), 'count': 2}},
+                                       'web_usage_v2': {'day': __import__('datetime').datetime.now(__import__('zoneinfo').ZoneInfo('Asia/Shanghai')).strftime('%Y-%m-%d'), 'count': 2}},
                              'save': lambda self: None,
                              'context': type('C', (), {'get_all_stars': lambda self: []})()})()
         status = f.self_status()
         self.assertIn('7/20', status['drawing'])
-        self.assertIn('2/40', status['search'])
+        self.assertIn('2/25', status['search'])
         self.assertEqual(status['voice'], '未加载')
         self.assertIn('没有Shell', status['limits'])
         self.assertNotIn('key', str(status).lower())

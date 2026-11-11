@@ -30,7 +30,7 @@
 
 脑图在 Canvas 中以带景深的空间坐标投影七个脑区，旋转、缩放、平移与节点命中共享同一套投影。支持双指缩放、滚轮、键盘以及复位按钮。搜索、脑区筛选和详情仍使用受保护的同一份数据接口。
 
-`deploy/room3d/` 包含六个独立场景的页面和模块。站点将这些文件放在 /room3d/house-sync/，首页与 /room3d/home.html 可以复用同一个 HTML。原像素首页可通过 /pixel-room.html 打开。页面使用站点的 Three.js r160（MIT）、GLTFLoader 及 @pixiv/three-vrm 3.0.0（MIT），由 /room3d/vendor/ 提供。
+`deploy/room3d/` 包含六个独立场景的页面和模块。站点将这些文件放在 /room3d/house-sync/，首页与 /room3d/home.html 可以复用同一个 HTML。页面使用站点的 Three.js r160（MIT）、GLTFLoader 及 @pixiv/three-vrm 3.0.0（MIT），由 /room3d/vendor/ 提供。
 
 六个场景按需初始化，跟随模式从公开房间状态映射当前活动和位置，手动参观时只展示当前空间的家具。角色资产为 pixiv 的 Vita（β Ver AvatarSample_3，CC0）。部署时将上游模型文件 Vita.vrm 保存到 /room3d/assets/vita.vrm。首屏等待当前模型，失败时提供重试。代码仓库无需附带模型文件。
 

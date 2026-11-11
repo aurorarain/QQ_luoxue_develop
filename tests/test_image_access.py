@@ -7,7 +7,7 @@ import unittest
 from unittest.mock import patch,AsyncMock
 from test_boundaries import features,Event,main
 from luoxue_social.image_policy import select_image_request,premium_request
-from luoxue_social.output_guard import guard_output
+from luoxue_social.output_guard import chat_text, guard_output
 
 
 def chain_text(chain):
@@ -82,6 +82,11 @@ class ImageAccess(unittest.IsolatedAsyncioTestCase):
             self.assertNotIn('mkdir',result)
             self.assertNotIn('sudo',prepare_voice(text))
         self.assertEqual(guard_output('老大，白米饭来啦。'),'老大，白米饭来啦。')
+
+    def test_chat_text_removes_stage_directions_but_keeps_explanations(self):
+        self.assertEqual(chat_text('（点头）（把抱枕放下）我在。'), '我在。')
+        self.assertEqual(chat_text('（可选）加 20 克糖（也可以不放）。'), '（可选）加 20 克糖（也可以不放）。')
+        self.assertNotIn('sudo', chat_text('（点头）\nsudo docker ps'))
 
     def test_owner_private_and_designated_group_command_routing(self):
         self.assertTrue(main.PrivateDrawing().filter(Event(sender='10001',private=True,text='/精绘26 鲸鱼'),{}))

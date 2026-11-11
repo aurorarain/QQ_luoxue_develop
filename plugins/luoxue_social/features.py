@@ -25,7 +25,7 @@ try:
 except Exception:
     Face = None
 from astrbot.core.message.message_event_result import MessageChain
-from . import rhythm
+from . import cognition, rhythm
 from .draw_planner import plan as plan_drawing
 from .output_guard import guard_output
 from .vision import attachment_images
@@ -320,14 +320,16 @@ class Features:
                 text += '\n你出门带的是那把浅色的太阳伞。'
             else:
                 text += '\n你出门没带伞。'
-        emo = room.get('emotions') or {}
+        now = time.time()
+        owner_memory = not self.s.state.get('memory_off') and self.feature_flag('memory')
+        emo = self.projected_emotions(now, owner=owner_memory)
         if emo:
             top = sorted(emo.items(), key=lambda kv: -float(kv[1] or 0))[:3]
             desc = '、'.join('%s%d' % (k, int(v)) for k, v in top if float(v or 0) >= 8)
             if desc:
                 text += '\n你此刻的情绪（0-100）：' + '、'.join('%s%d' % (k, int(v)) for k, v in emo.items()) + \
                         '；最明显的是' + desc + '。让它影响语气，但不用报数值。'
-        des = room.get('desires') or {}
+        des = self.projected_desires(now, owner=owner_memory)
         if des:
             low = [k for k, v in des.items() if float(v or 0) < 30]
             if low:
@@ -651,8 +653,11 @@ class Features:
         usage=self.s.state.get('image_usage',{}) or {}
         drawn=usage.get('group_count',0) if usage.get('day')==today else 0
         cap=int(image.get('group_daily_limit',20) or 20)
-        web=self.s.state.get('web_usage',{}) or {}
-        searched=web.get('count',0) if web.get('day')==today else 0
+        from .web_search import settings as search_settings, PROVIDERS
+        search_config=search_settings(self)
+        web=self.s.state.get('web_usage_v2',{}) or {}
+        web_today=dt.datetime.now(ZoneInfo('Asia/Shanghai')).strftime('%Y-%m-%d')
+        searched=web.get('count',0) if web.get('day')==web_today else 0
         voice=False
         try:
             meta=next((m for m in self.s.context.get_all_stars() if m.root_dir_name=='luoxue_voice'),None)
@@ -663,7 +668,7 @@ class Features:
                 'vision':'能看本轮随消息附带的图片（最多2张）',
                 'drawing':f'{image.get("model") or "wan2.6-t2i"}；群友今天 {drawn}/{cap} 张，老大不限量',
                 'memory':'和老大私聊有长期记忆/画像/日记；群里只记公开聊天，不读私聊',
-                'search':f'联网搜索可用，今天 {searched}/40 次',
+                'search':(f"{PROVIDERS[search_config['provider']]} 内置搜索，今日预留 {searched}/{search_config['daily_limit']} 次" if search_config['key'] else '内置搜索尚未配置密钥，暂不可用'),
                 'stickers':f'{len(self.index)} 张本地表情',
                 'qzone':'能发说说、点赞、评论（接口成功不等于客户端可见）',
                 'singing':'还不能唱歌（缺曲库和RVC）',
@@ -913,7 +918,7 @@ class Features:
             'features':{'group_members':True,'group_observation':'text after activation, no automatic replies',
                         'stickers':'local images/GIF supported; semantic category selection with cooldown',
                         'private_companion':'owner-only daily diary and fading role mood; no extra proactive messages',
-                        'web_search':'public search snippets with source links; 40 searches/day',
+                        'web_search':'integrated API search snippets with source links; configurable daily/monthly caps',
                         'group_proactive':'single configured group; public context only; at most 2/day',
                         'singing_api':'not configured; Fish TTS voice ID is not a singing voice ID',
                         'qzone':'API available; actual writes depend on service response',
@@ -1213,7 +1218,7 @@ class Features:
         return body[:limit]
 
     async def search_tieba(self, keyword, limit=6):
-        """贴吧搜索：标题 + 链接。百度对机房 IP 经常整页安全验证，拦了就退回必应的公开结果。"""
+        """贴吧搜索：标题 + 链接。百度对机房 IP 经常整页安全验证，拦了就退回内置搜索的公开结果。"""
         import urllib.parse as _url
         kw = str(keyword or '').strip()[:60]
         if not kw:
@@ -1234,7 +1239,7 @@ class Features:
                     return '\n'.join(rows[: limit * 4])
         except Exception as exc:
             logger.info('[luoxue_tieba] tieba blocked: %s', type(exc).__name__)
-        # 贴吧直连被安全验证挡住时，用必应拿公开结果，明确告诉她这是网页不是贴吧原帖。
+        # 贴吧直连被安全验证挡住时，用内置搜索拿公开结果，明确告诉她这是网页不是贴吧原帖。
         try:
             from .web_search import search as web_search
             data = await web_search(self, kw + ' 贴吧 讨论')
@@ -1246,7 +1251,7 @@ class Features:
                     lines.append('%s\n%s\n%s' % (str(row.get('title', ''))[:80],
                                                  str(row.get('url', '')),
                                                  str(row.get('summary', ''))[:220]))
-                return ('（贴吧直连被百度的安全验证挡了，以下是必应上关于「%s」的公开网页，不是贴吧原帖）\n' % kw
+                return ('（贴吧直连被百度的安全验证挡了，以下是公开搜索中关于「%s」的公开网页，不是贴吧原帖）\n' % kw
                         + '\n'.join(lines))
             content = str(data.get('content') or '').strip()
             if content:
@@ -2127,7 +2132,6 @@ class Features:
     ]
     BODY_STATES = [('cold', '有点感冒', '裹着毯子'), ('period', '肚子不太舒服', '缩着'),
                    ('foodcoma', '吃撑了', '瘫着')]
-    EMOTIONS = [('sulk', '有点闹别扭'), ('happy', '心情悄悄变好'), ('bored', '无聊到想戳屏幕')]
     FESTIVALS = {(1, 1): '元旦', (2, 14): '情人节', (5, 20): '520', (10, 1): '国庆',
                  (12, 24): '平安夜', (12, 25): '圣诞'}
 
@@ -2301,8 +2305,11 @@ class Features:
     EMOTIONS = ['喜', '怒', '哀', '惧', '爱', '怜', '恶', '欲']
     EMOTION_HALF = {'喜': 2.5, '怒': 1.2, '哀': 4.0, '惧': 2.0,
                     '爱': 8.0, '怜': 3.0, '恶': 2.0, '欲': 5.0}
+    EMOTION_BASE = {'喜': 22., '怒': 2., '哀': 5., '惧': 4.,
+                    '爱': 24., '怜': 13., '恶': 2., '欲': 14.}
     DESIRES = ['见', '听', '香', '味', '触', '意']
     DESIRE_RATE = {'见': 5.0, '听': 4.0, '香': 3.0, '味': 7.0, '触': 6.0, '意': 6.0}
+    DESIRE_BASE = {'见': 37., '听': 45., '香': 48., '味': 42., '触': 42., '意': 38.}
 
     def emotions(self, now=None):
         now = now or time.time()
@@ -2315,12 +2322,26 @@ class Features:
         hours = min(24.0, max(0.0, (now - last) / 3600.0))
         state['room_emotions_at'] = now
         for name in self.EMOTIONS:
-            value = _num(rows.get(name, 0.0))
+            baseline = self.EMOTION_BASE[name]
+            value = _num(rows.get(name, baseline), baseline)
             half = self.EMOTION_HALF.get(name, 3.0)
             if half > 0 and hours > 0:
-                value *= 0.5 ** (hours / half)
-            rows[name] = round(max(0.0, min(100.0, value)), 1)
+                value = baseline + (value - baseline) * 0.5 ** (hours / half)
+            rows[name] = max(0.0, min(100.0, value))
         return rows
+
+    def projected_emotions(self, now, owner=False):
+        rows = dict(self.emotions(now))
+        changes = cognition.affect_overlay(self.s.state, now, owner)['emotions']
+        for name, delta in changes.items():
+            rows[name] += delta
+        return {name: round(cognition.clamp(value, 0, 100), 1) for name, value in rows.items()}
+
+    def projected_desires(self, now, owner=False):
+        rows = self.desires(now, update=False)
+        changes = cognition.affect_overlay(self.s.state, now, owner)['needs']
+        return {name: round(cognition.clamp(value + changes.get(name, 0.), 0, 100), 1)
+                for name, value in rows.items()}
 
     def desires(self, now=None, update=True):
         now = now or time.time()
@@ -2330,12 +2351,15 @@ class Features:
             rows.update({name: 62.0 for name in self.DESIRES})
         last = float(state.get('room_desires_at', now))
         hours = min(12.0, max(0.0, (now - last) / 3600.0))
+        projected = {}
+        for name, base in self.DESIRE_BASE.items():
+            current = _num(rows.get(name, 55.), 55.)
+            projected[name] = cognition.clamp(base + (current - base) * .5 ** (hours * self.DESIRE_RATE[name] / 36), 0, 100)
         if update:
             state['room_desires_at'] = now
-            for name in self.DESIRES:
-                value = _num(rows.get(name, 55.0), 55.0) - self.DESIRE_RATE.get(name, 5.0) * hours
-                rows[name] = round(max(0.0, min(100.0, value)), 1)
-        return rows
+            rows.update(projected)
+            return rows
+        return {name: round(value, 1) for name, value in projected.items()}
 
     def bump_emotion(self, name, amount):
         rows = self.emotions()
@@ -2355,8 +2379,8 @@ class Features:
         """交给模型的完整实时参数：情绪、六欲、体力心情、病、禁言、没做到的承诺。"""
         now = time.time()
         state = self.s.state
-        with_emotion = self.emotions(now)
-        with_desire = self.desires(now, update=False)
+        with_emotion = self.projected_emotions(now)
+        with_desire = self.projected_desires(now)
         return {
             'emotions': {k: int(round(_num(v))) for k, v in with_emotion.items()},
             'desires': {k: int(round(_num(v))) for k, v in with_desire.items()},
@@ -3168,15 +3192,6 @@ class Features:
                 body = {'kind': kind, 'label': label, 'posture': posture, 'until': now + random.randint(3600, 7200)}
             state['room_body'] = body
 
-        # 情绪（低概率，持续 40-90 分钟）
-        emotion = state.get('room_emotion') or {}
-        if not emotion or now > float(emotion.get('until', 0)):
-            emotion = {'kind': '', 'until': 0}
-            if random.random() < 0.02:
-                kind, label = random.choice(self.EMOTIONS)
-                emotion = {'kind': kind, 'label': label, 'until': now + random.randint(2400, 5400)}
-            state['room_emotion'] = emotion
-
         # 出门
         outing = state.get('room_outing') or {}
         state['room_away_now'] = bool(outing and now < float(outing.get('until', 0)))
@@ -3298,15 +3313,10 @@ class Features:
             state['room_festival_day'] = month_day
             self.note_room('今天是' + festival, '记得日子')
 
-        # 日常活动（按身体/情绪/时段加权）
+        # 房间背景活动，独处规则选中的活动会在状态投影时覆盖。
         if body.get('kind'):
             return {'activity': body.get('posture', '不舒服') + '（' + body.get('label', '不太舒服') + '）',
                     'action': 'lie', 'spot': 'bed'}
-        if emotion.get('kind') == 'sulk':
-            return {'activity': '蜷在床上闹别扭', 'action': 'lie', 'spot': 'bed'}
-        if emotion.get('kind') == 'bored':
-            return {'activity': '无聊到想戳屏幕', 'action': 'phone', 'spot': 'sofa'}
-
         idle = self.roll_activity()
         if any(word in str(idle.get('activity')) for word in ('接稿', '收拾', '扫地', '整理', '晾', '写日记')):
             self.spend_energy(3.0)
@@ -3332,6 +3342,8 @@ class Features:
         phase = '深夜' if hour < 6 else '清晨' if hour < 9 else '上午' if hour < 12 else '下午' if hour < 18 else '晚上'
 
         mode, debt = self.sleep_state(now)
+        cognition.advance(state, {'sleepMode': mode}, now)
+        affect = cognition.snapshot(state, now)
         lights = self.lights_state(now, mode)
         day = self.daylight(now)
         weather = self.roll_weather()
@@ -3345,14 +3357,14 @@ class Features:
             life = self.simulate_life(now)
         props = self.roll_props(life.get('activity', ''))
 
-        # 体力：时段基准 - 睡眠债 + 随机漂移
+        # 体力向当时的身体基准靠拢，活动消耗另计。
         base = 90 if 9 <= hour < 12 else 78 if 12 <= hour < 18 else 62 if 18 <= hour < 23 else 30
         sick_now = state.get('room_illness') or {}
         if sick_now and not sick_now.get('faking'):
             base -= 18 if sick_now.get('kind') == 'severe' else 10
         base -= self.sleep_debt_penalty()
         energy = float(state.get('room_energy', base))
-        energy += (base - energy) * 0.25 + random.uniform(-1.2, 1.2)
+        energy += (base - energy) * 0.25
         energy -= min(6.0, float(state.get('room_energy_drain', 0)))
         state['room_energy_drain'] = 0
         energy = max(12.0, min(96.0, energy))
@@ -3360,12 +3372,12 @@ class Features:
 
         weather_kind = weather.get('kind', '晴')
         body = state.get('room_body') or {}
-        emotion = state.get('room_emotion') or {}
         tags = []
         if body.get('label'):
             tags.append(body['label'])
-        if emotion.get('label'):
-            tags.append(emotion['label'])
+        emotion_label = '有点紧绷' if affect['stress'] >= 5 else '心情轻快' if affect['valence'] >= 5 else ''
+        if emotion_label:
+            tags.append(emotion_label)
         if weather_kind in ('小雨', '大暴雨'):
             tags.append('下着雨')
         if weather_kind == '晴' and 10 <= hour < 16:
@@ -3405,7 +3417,7 @@ class Features:
             mood_value -= 6
         if energy < 35:
             mood_value -= 8
-        mood_value += random.uniform(-4, 4)
+        mood_value += affect['valence'] - affect['stress'] * .40
         mood_value = max(8.0, min(100.0, mood_value))
 
         if mood_value > 80:
@@ -3425,7 +3437,7 @@ class Features:
             '亲密': intimacy,
             '信任': trust,
             '兴致': interest,
-            '睡意': round(max(0, min(100, 100 - energy + random.uniform(-4, 4)))),
+            '睡意': round(max(0, min(100, _num(state.get('room_sleepiness'), 40)))),
             '饥饿': hunger,
         }
         state['room_mood_value'] = round(mood_value)
@@ -3452,6 +3464,9 @@ class Features:
                 life = dict(life, activity='在沙发上歇一会儿', action='idle', spot='sofa')
             elif now < brain.get('reading_until', 0):
                 life = dict(life, activity='在书桌边看书', action='read', spot='desk')
+            elif routine := (state.get('cognition') or {}).get('routine'):
+                spec = cognition.ROUTINES[routine['action']]
+                life = dict(life, activity=spec['label'], action=spec['action'], spot=spec['spot'])
         if mode in ('asleep', 'nap'):
             mood = '睡得很安静'
         if mode == 'awake' and not life.get('outing') and state.get('autonomy_enabled', True):
@@ -3480,14 +3495,14 @@ class Features:
             'qqStatus': (state.get('qq_status_usage') or {}).get('current', ''),
             'economy': {'incomes': self.income_types(), 'stores': self.stores()},
             'books': book_rows,
-            'emotions': self.emotions(now),
+            'emotions': self.projected_emotions(now),
             'lifeEvents': [{'at': row.get('at', 0), 'text': row.get('text', ''),
                             'kind': row.get('kind', 'event'), 'weight': row.get('weight', 0)}
                            for row in (state.get('life_events') or [])[-60:]
                            if row.get('kind') != 'thought'][-30:],
             'promises': [{'text': row.get('text', ''), 'due': row.get('due', 0)}
                          for row in (state.get('promises') or []) if not row.get('done')][-8:],
-            'desires': self.desires(now, update=False),
+            'desires': self.projected_desires(now),
             'clock': info['clock'], 'date': info['date'], 'weekday': info['weekday'],
             'season': info['season'], 'phase': phase, 'daylight': round(day, 2),
             'lights': lights, 'sleepMode': mode, 'sleepDebt': round(debt, 1),
@@ -3506,7 +3521,7 @@ class Features:
                          'faking': bool(sick_now.get('faking')),
                          'remainH': round(max(0.0, (float(sick_now.get('until', 0)) - now) / 3600), 1)}
                         if sick_now else {}),
-            'body': body.get('label', ''), 'emotion': emotion.get('label', ''),
+            'body': body.get('label', ''), 'emotion': emotion_label,
             'festival': state.get('room_festival_day') == time.strftime('%m-%d', time.localtime(now))
                         and self.FESTIVALS.get((int(time.strftime('%m')), int(time.strftime('%d'))), '') or '',
         }
@@ -3532,6 +3547,12 @@ class Features:
             tmp.write_text(json.dumps(snapshot, ensure_ascii=False, indent=1), encoding='utf-8')
             tmp.replace(path)
             self._room_snapshot = snapshot
+            now = snapshot['snapshotAt']
+            owner_memory = not self.s.state.get('memory_off') and self.feature_flag('memory')
+            view = cognition.projection(self.s.state, now)
+            view['emotions'] = self.projected_emotions(now, owner=owner_memory)
+            view['needs'] = self.projected_desires(now, owner=owner_memory)
+            self.s.state['cognition_view'] = view
             self.s.save()
         except Exception as exc:
             logger.info('[luoxue_room] state write skipped: %s', type(exc).__name__)

@@ -58,19 +58,24 @@ class IntegrationBoundaries(unittest.TestCase):
 
 
 class SearchIntegration(unittest.IsolatedAsyncioTestCase):
-    async def test_automatic_group_search_uses_plugin_without_private_history(self):
+    async def test_integrated_search_never_calls_old_plugin_or_private_history(self):
+        from unittest.mock import AsyncMock
         web=importlib.import_module('luoxue_social.web_search')
-        calls=[]
-        async def search(query,max_results):calls.append(query);return '公开搜索来源 https://example.com/'
-        instance=SimpleNamespace(client=SimpleNamespace(search=search))
-        meta=SimpleNamespace(name='astrbot_plugin_anysearch',activated=True,star_cls=instance)
-        social=SimpleNamespace(state={},save=lambda:None,context=SimpleNamespace(get_all_stars=lambda:[meta]))
-        feature=SimpleNamespace(s=social,cfg={})
-        result=await web.search(feature,'AstrBot 最新版本')
-        self.assertEqual(result['provider'],'AnySearch')
-        self.assertEqual(calls,['AstrBot 最新版本'])
-        cached=await web.search(feature,'AstrBot 最新版本')
-        self.assertEqual(cached,result);self.assertEqual(len(calls),1)
+        fetch=importlib.import_module('luoxue_social.features')
+        social=SimpleNamespace(state={'private':[{'text':'PRIVATE_CANARY'}]},save=lambda:None,
+            context=SimpleNamespace(get_all_stars=lambda: self.fail('old plugin discovery')))
+        feature=SimpleNamespace(s=social,cfg={'web_search':{'tavily_api_key':'TEST_CANARY'}})
+        response={'results':[{'title':'AstrBot 最新版本','url':'https://example.org/release','content':'AstrBot 版本发布说明'}]}
+        with patch.object(fetch,'fetch',AsyncMock(return_value=json.dumps(response).encode())) as call:
+            result=await web.search(feature,'AstrBot 最新版本')
+            self.assertEqual(result['provider'],'Tavily')
+            self.assertEqual(len(result['items']),1)
+            self.assertNotIn('PRIVATE_CANARY',str(call.call_args))
+            self.assertEqual(call.call_args.kwargs['json_body']['search_depth'],'basic')
+            self.assertFalse(call.call_args.kwargs['json_body']['auto_parameters'])
+            cached=await web.search(feature,'AstrBot 最新版本')
+            self.assertTrue(cached['cached'])
+            self.assertEqual(call.await_count,1)
 
 
 if __name__=='__main__':unittest.main()

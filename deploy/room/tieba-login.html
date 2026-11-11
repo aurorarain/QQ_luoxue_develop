@@ -35,7 +35,7 @@
 <div data-site-nav="tieba"></div>
 <div class="card">
   <h1>给洛雪一个贴吧身份</h1>
-  <p>百度把无头浏览器的扫码登录拦成了安全验证，所以改成<b>你登录一次、把 Cookie 交给我</b>。Cookie 存在服务器上，只用于她的贴吧阅读和发帖。</p>
+  <p>先在浏览器登录贴吧，再把 Cookie 保存到服务器，供洛雪的贴吧节点读取。节点已在运行时，保存后重启节点即可加载新 Cookie。</p>
   <ol>
     <li>电脑浏览器打开 <code>tieba.baidu.com</code>，确认已登录</li>
     <li>按 <code>F12</code> → <b>Network</b> 标签 → 刷新页面</li>
@@ -53,12 +53,20 @@
 const msg = document.getElementById('msg');
 function say(text, cls) { msg.className = cls || ''; msg.textContent = text; }
 
-async function status() {
+async function status(justSaved = false) {
   try {
-    const r = await fetch('/roomapi/tieba/status', { cache: 'no-store' });
-    const d = await r.json();
-    if (d.saved) say('已经有 Cookie 了（' + d.length + ' 字符，含 BDUSS：' + (d.hasBDUSS ? '是' : '否') + '）', 'ok');
-  } catch (e) {}
+    const [cookie, node] = await Promise.all(['/roomapi/tieba/status', '/roomapi/node/status'].map(async url => {
+      const response = await fetch(url, { cache: 'no-store' });
+      if (!response.ok) throw new Error('状态暂不可读');
+      return response.json();
+    }));
+    const ready = cookie.saved && cookie.hasBDUSS;
+    const cookieLabel = ready ? 'Cookie 已保存' : '暂无完整的 Cookie';
+    const nodeLabel = node.online ? '节点在线' : '节点离线';
+    say(cookieLabel + ' · ' + nodeLabel + (ready ? ' · 百度登录待验证' : ''), ready && node.online ? 'ok' : '');
+  } catch {
+    say(justSaved ? 'Cookie 已保存，节点状态暂不可读。' : '暂时无法查询贴吧状态。', '');
+  }
 }
 
 document.getElementById('save').onclick = async () => {
@@ -74,7 +82,10 @@ document.getElementById('save').onclick = async () => {
       body: JSON.stringify({ cookie })
     });
     const d = await r.json();
-    if (d.ok) say('保存好了，她可以开始用贴吧身份了。', 'ok');
+    if (r.ok && d.ok) {
+      document.getElementById('cookie').value = '';
+      await status(true);
+    }
     else say('没成功：' + (d.error || '未知错误'), 'bad');
   } catch (e) {
     say('请求失败：' + e.message, 'bad');

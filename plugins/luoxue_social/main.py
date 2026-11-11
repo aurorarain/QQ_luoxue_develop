@@ -15,7 +15,7 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 from .persona import PERSONA, PUBLIC_PERSONA
 from .vision import attachment_images, attachment_note, media_messages
-from . import feeds, life, rhythm
+from . import cognition, feeds, life, rhythm
 
 from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, filter
@@ -243,7 +243,7 @@ SAFE_TOOLS = {'read_memory_detail','read_todo','update_profile','update_soul','o
               'forget_growth','reset_profile','reset_soul','create_memory','update_memory',
               'delete_memory','create_todo','complete_todo','update_todo','delete_todo',
               'clear_todo','add_memo_block','write_memo_block','delete_memo_block','speak','sing','luoxue_capabilities','luoxue_web_search','draw_picture','send_sticker','send_voice','add_reminder','list_reminders','delete_reminder','list_stickers','money_admin','economy_admin','read_page','search_tieba','switch_voice','say_in_group','self_config', 'self_status','read_star_map', 'tieba_read', 'read_book', 'list_books', 'tieba_reply', 'manage_memory','mute_member','unmute_member','poke_user','growth_status','observe_trait','ratify_growth','reject_growth','revoke_growth'}
-SAFE_TOOLS |= {'anysearch_search', 'anysearch_extract', 'change_my_signature', 'change_my_status',
+SAFE_TOOLS |= {'change_my_signature', 'change_my_status',
                'parse_media_url',
                'growth_status', 'observe_trait', 'ratify_growth', 'reject_growth', 'revoke_growth',
                'add_reminder', 'list_reminders', 'delete_reminder', 'list_stickers', 'draw_picture', 'send_sticker', 'send_voice', 'money_admin', 'economy_admin', 'say_in_group', 'self_config', 'read_star_map', 'mute_member', 'unmute_member', 'read_page', 'search_tieba', 'switch_voice',
@@ -735,6 +735,8 @@ class Social(Star):
         if not text:
             return
         self.room_event('owner', text, self.action_for(text))
+        self.add('private', OWNER, text)
+        experience = cognition.private_context(self.state, text, time.time())
         try:
             from .persona import PERSONA
             sleep_mode = (self.state.get('room_sleep') or {}).get('mode', 'awake')
@@ -744,7 +746,8 @@ class Social(Star):
                         '别说自己在工作或在忙。）对方说：' + text)
             reply = await self.generate(
                 text,
-                PERSONA + self.features.growth_persona() + self.features.private_instructions() + self.features.self_awareness() + self.clock_context('private'),
+                PERSONA + self.features.growth_persona() + self.features.private_instructions()
+                + self.features.self_awareness() + self.clock_context('private') + experience,
                 'napcat:FriendMessage:' + OWNER)
         except Exception as exc:
             logger.info('[luoxue_room] generate failed: %s', type(exc).__name__)
@@ -794,6 +797,7 @@ class Social(Star):
             features.person_note(sender, name, text)
         if channel == 'private' and str(sender) == OWNER and hasattr(features, 'queue_memory'):
             features.queue_memory(text, speaker=OWNER, role='主人', channel='owner_private')
+            cognition.observe_owner(self.state, text, stamp)
         if hasattr(self, 'db_path'):
             with contextlib.closing(sqlite3.connect(self.db_path)) as db:
                 db.execute('INSERT INTO events(channel,ts,sender,text) VALUES(?,?,?,?)', (channel,time.time(),str(sender),text[:2000]))
@@ -812,7 +816,14 @@ class Social(Star):
         return result
 
     def group_memory(self, query):
-        recent = self.dedupe(self.state.get('group_observed', [])[-14:] + self.state.get('group', [])[-14:])
+        recent = self.state.get('group_observed', [])[-14:] + self.state.get('group', [])[-14:]
+        def by_time(row):
+            return row.get('time', 0)
+
+        recent = self.dedupe(sorted(recent, key=by_time))
+        if re.fullmatch(r'[\W_]*(?:可以|好|行|嗯+|哦+|收到|对|是的|好吧|ok|nono)[\W_]*', query or '', re.I):
+            cutoff = time.time() - 900
+            return [row for row in recent if by_time(row) >= cutoff]
         if not hasattr(self, 'db_path'):
             return recent
         keywords = re.findall(r'[\u4e00-\u9fff]{2,6}|[a-zA-Z]{3,15}', query or '')[-8:]
@@ -824,7 +835,7 @@ class Social(Star):
             rows = db.execute('SELECT ts,sender,text FROM events WHERE channel IN ("group","group_observed") AND (' + condition + ') ORDER BY id DESC LIMIT 12',
                               ['%' + k + '%' for k in keywords]).fetchall()
         hits = [{'time':t,'sender':s,'text':x} for t,s,x in reversed(rows)]
-        return self.dedupe(hits + recent)
+        return self.dedupe(sorted(hits + recent, key=by_time))
 
     async def generate(self, prompt, system, umo=None, image_urls=None):
         provider = await self.context.get_using_provider_async(umo or self.state.get('owner_umo'))
@@ -929,6 +940,8 @@ class Social(Star):
                 self.clock_context('group')+
                 await self.features.web_context(text)+attachment_note(len(images))+wanted_hint, event.unified_msg_origin,
                 image_urls=images or None)
+            from .output_guard import chat_text
+            reply = chat_text(reply)
             if not reply:
                 return
             if reply.strip().startswith('[SKIP]') or reply.strip() in ('[静默]', '[skip]'):
@@ -1064,6 +1077,7 @@ class Social(Star):
         req.system_prompt += growth_context(self)
         req.system_prompt += self.clock_context('private')+await self.features.web_context(text)
         req.system_prompt += self.features.self_awareness()
+        req.system_prompt += cognition.private_context(self.state, text, time.time())
         _sleep_note = getattr(self.features, 'sleep_note', None)
         if callable(_sleep_note):
             req.system_prompt += _sleep_note(True)
@@ -1235,7 +1249,7 @@ class Social(Star):
 
     @filter.llm_tool(name='search_tieba')
     async def search_tieba_tool(self,event: AstrMessageEvent,keyword:str) -> str:
-        """去贴吧/网上搜关键词，拿回帖子和链接。百度整页安全验证挡住时会退回必应公开结果，范围里会写明来源。"""
+        """去贴吧/网上搜关键词，拿回帖子和链接。百度整页安全验证挡住时会退回内置搜索公开结果，范围里会写明来源。"""
         if not event.is_private_chat() or str(event.get_sender_id())!=OWNER:
             return '只能在跟主人私聊时用。'
         return await self.features.search_tieba(keyword)
@@ -1680,10 +1694,14 @@ class Social(Star):
 
     @filter.on_llm_response()
     async def private_response(self, event, response):
-        from .output_guard import guard_output
-        response.completion_text=guard_output(response.completion_text or '')
+        from .output_guard import chat_text, guard_output
         if event.is_private_chat() and str(event.get_sender_id()) == OWNER:
+            response.completion_text = chat_text(response.completion_text or '')
             self.add('private', '洛雪', response.completion_text or '')
+        elif not event.is_private_chat() and str(event.get_group_id()) == GROUP:
+            response.completion_text = chat_text(response.completion_text or '')
+        else:
+            response.completion_text = guard_output(response.completion_text or '')
 
     @filter.on_decorating_result()
     async def private_meme(self, event):
@@ -1768,21 +1786,16 @@ class Social(Star):
             except Exception as exc:
                 logger.info('[luoxue_social] memory processing deferred: %s', type(exc).__name__)
         await self.night_care()
-        umo = self.state.get('owner_umo', '')
         if not 9 <= current.hour < 23:
-            # 深夜：不刷群、不发消息，但她还可以一个人待着，情绪和六欲照样走。
-            if umo == 'napcat:FriendMessage:' + OWNER:
-                try:
-                    await self.heartbeat(current, quiet=True)
-                except Exception as exc:
-                    logger.info('[luoxue_social] night heartbeat deferred: %s: %s', type(exc).__name__, str(exc)[:200])
+            try:
+                await self.heartbeat(current, quiet=True)
+            except Exception as exc:
+                logger.info('[luoxue_social] night heartbeat deferred: %s', type(exc).__name__)
             return
         await self.features.idle()
         await self.features.qzone_interactions()
         try:await self.features.proactive_group(current)
         except Exception as exc:logger.info('[luoxue_social] public proactive deferred: %s',type(exc).__name__)
-        if umo != 'napcat:FriendMessage:' + OWNER:
-            return
         try:
             await self.heartbeat(current, quiet=False)
         except Exception as exc:
@@ -1882,6 +1895,8 @@ class Social(Star):
         if not OWNER or not self.state.get('autonomy_enabled', True):
             return
         await autonomy.cycle(self, current, 'napcat:FriendMessage:' + OWNER, quiet or in_quiet_hours(current))
+        if not quiet and not in_quiet_hours(current):
+            await autonomy.reflect(self, OWNER)
 
     @staticmethod
     def _too_similar(text, old, threshold=0.62):
@@ -1985,7 +2000,7 @@ class Social(Star):
             except Exception as exc:
                 logger.warning('[luoxue_social] background action failed: %s', type(exc).__name__)
             # 心跳自己控制节奏（hb_interval），外层只负责别空转
-            await asyncio.sleep(60 + random.randint(0, 20))
+            await asyncio.sleep(60)
 
     async def terminate(self):
         if self.task:

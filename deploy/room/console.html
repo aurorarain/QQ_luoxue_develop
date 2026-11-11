@@ -163,6 +163,7 @@
   <div class="nav">
     <a href="#run">◇ 运行状态</a>
     <a href="#topo">◇ 系统拓扑</a>
+    <a href="#search">◇ 联网搜索</a>
     <a href="#settings">◇ 设置</a>
   </div>
   <div class="side-foot">洛雪的活动、记忆与设置</div>
@@ -307,6 +308,22 @@
     </section>
 
 
+    <section class="card wide" id="search" data-protect="1">
+      <h2>联网搜索 <em>洛雪内置</em></h2>
+      <p class="muted">Tavily 使用 Basic，每次 1 credit。相同查询会复用缓存。默认每日最多 25 次、每月最多 900 次调用，失败请求也预留一次用量。这里的上限不能代替服务商账单。</p>
+      <div style="display:grid;gap:16px;max-width:560px">
+        <label>搜索服务 <select id="search-provider"><option value="tavily">Tavily · Basic</option><option value="brave">Brave Search</option></select></label>
+        <label>API Key <input id="search-key" type="password" autocomplete="new-password" placeholder="填写密钥；留空保留该服务已保存的密钥" style="width:100%;margin-top:6px"></label>
+        <div style="display:flex;gap:16px;flex-wrap:wrap">
+          <label>每日调用上限 <input id="search-daily" type="number" min="1" max="200" value="25" style="width:85px"></label>
+          <label>每月调用上限 <input id="search-monthly" type="number" min="1" max="10000" value="900" style="width:85px"></label>
+        </div>
+        <div><button class="btn" onclick="saveSearch()">保存搜索设置</button> <button class="btn ghost" onclick="loadSearch(false)">刷新用量</button></div>
+        <div class="muted" id="search-status" role="status" aria-live="polite">解锁后读取设置</div>
+        <div class="muted">密钥保存在服务器私有配置中，不回显、不写入洛雪的记忆。保存立即生效，不需要重启。已配置表示密钥已保存，实际可用性由下一次搜索确认。</div>
+      </div>
+    </section>
+
     <section class="card wide" id="settings" data-protect="1">
       <h2>设置 · 资金出入 <em>查看不用密码</em></h2>
       <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap">
@@ -345,6 +362,39 @@ function bar(label, value, cls) {
     '"><i style="width:' + v + '%"></i></div><span class="val">' + Math.round(v) + '</span></div>';
 }
 
+let searchLoaded = false;
+async function loadSearch(fill = false) {
+  if (!sessionStorage.getItem(PWKEY)) return;
+  const output = document.getElementById('search-status');
+  try {
+    const r = await fetch('/roomapi/search/status', {cache: 'no-store', headers: {'X-Password': sessionStorage.getItem(PWKEY)}});
+    if (!r.ok) throw new Error();
+    const data = await r.json();
+    if (fill && !searchLoaded) {
+      document.getElementById('search-provider').value = data.provider;
+      document.getElementById('search-daily').value = data.daily_limit;
+      document.getElementById('search-monthly').value = data.monthly_limit;
+      searchLoaded = true;
+    }
+    output.textContent = (data.provider === 'brave' ? 'Brave' : 'Tavily') + (data.configured ? ' · 已保存密钥' : ' · 尚未填写密钥') + ' · 今日预留 ' + data.today + '/' + data.daily_limit + ' 次 · 本月预留 ' + data.month + '/' + data.monthly_limit + ' 次';
+  } catch (e) { output.textContent = '读取失败，请解锁后重试'; }
+}
+async function saveSearch() {
+  const output = document.getElementById('search-status');
+  const input = document.getElementById('search-key');
+  try {
+    const r = await fetch('/roomapi/search/config', {method: 'POST', headers: {'Content-Type': 'application/json', 'X-Password': sessionStorage.getItem(PWKEY) || ''}, body: JSON.stringify({
+      provider: document.getElementById('search-provider').value, api_key: input.value.trim(),
+      daily_limit: Number(document.getElementById('search-daily').value), monthly_limit: Number(document.getElementById('search-monthly').value)
+    })});
+    const data = await r.json();
+    if (!r.ok || !data.ok) throw new Error(data.error || '保存失败');
+    input.value = '';
+    toast('搜索设置已保存，立即生效');
+    await loadSearch(false);
+  } catch (e) { output.textContent = e.message || '保存失败'; }
+}
+
 async function poll() {
   try {
     const pwd = sessionStorage.getItem(PWKEY);
@@ -359,6 +409,7 @@ async function poll() {
       full = null;
     }
     render();
+    if (location.hash === '#search' && full) await loadSearch(true);
   } catch (e) {
     document.getElementById('subline').textContent = '连不上服务';
   }
@@ -717,6 +768,8 @@ function renderEcon() {
 async function askPassword() {
   if (sessionStorage.getItem(PWKEY)) {
     sessionStorage.removeItem(PWKEY);
+    document.getElementById('search-key').value = '';
+    searchLoaded = false;
     econLocked = true;
     full = null;
     const btn = document.getElementById('unlockbtn');
@@ -793,6 +846,7 @@ function showView(id) {
   document.querySelectorAll('.nav a').forEach(x => {
     x.classList.toggle('on', x.getAttribute('href') === '#' + target.id);
   });
+  if (target.id === 'search') loadSearch(true);
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 document.querySelectorAll('.nav a').forEach(a => {

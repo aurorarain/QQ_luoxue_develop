@@ -1,6 +1,7 @@
 # All identities, messages, locations and media in this file are synthetic test fixtures.
 import types
 import unittest
+from unittest.mock import patch
 
 import test_boundaries  # noqa: F401
 from test_boundaries import main, features
@@ -40,6 +41,15 @@ class NoDoubleCounting(unittest.TestCase):
         s = social({'group_observed': [{'time': 100, 'sender': '90001', 'text': '哈哈哈'}],
                     'group': [{'time': 100 + 600, 'sender': '90001', 'text': '哈哈哈'}]})
         self.assertEqual(len(s.group_memory('哈哈哈')), 2)
+
+    def test_group_acknowledgement_uses_only_recent_turns_in_order(self):
+        s = social({'group_observed': [{'time': 500, 'sender': '90001', 'text': '上一个话题'},
+                                      {'time': 9950, 'sender': '90001', 'text': '我回来了'}],
+                    'group': [{'time': 9900, 'sender': '洛雪', 'text': '门开着'}]})
+        s.db_path = 'an acknowledgement must not open the database'
+        with patch.object(main.time, 'time', return_value=10000), patch.object(main.sqlite3, 'connect') as connect:
+            self.assertEqual([r['text'] for r in s.group_memory('可以。')], ['门开着', '我回来了'])
+        connect.assert_not_called()
 
 
 class DrawingHonesty(unittest.TestCase):

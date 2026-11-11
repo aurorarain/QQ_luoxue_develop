@@ -27,16 +27,13 @@ class Extensions(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(f.choose_meme('开心',False,'g').name,'a.gif')
         self.assertIsNone(f.choose_meme('生气',False,'g'))
 
-    async def test_public_search_returns_sources_without_credentials(self):
+    async def test_public_search_requires_credentials_and_rejects_secrets(self):
         f=features.Features.__new__(features.Features)
         f.s=types.SimpleNamespace(state={},save=lambda:None);f.cfg={}
-        body=b'<rss><channel><item><title>public example</title><link>https://example.org/topic</link><description>source summary</description></item></channel></rss>'
-        with patch.object(features,'fetch',AsyncMock(return_value=body)) as call:
+        with patch.dict('os.environ', {'TAVILY_API_KEY':''}), patch.object(features,'fetch',AsyncMock()) as call:
             result=await web_search.search(f,'公开网络热梗')
-            self.assertEqual(len(result['items']),1)
-            self.assertNotIn('Authorization',str(call.call_args))
-            await web_search.search(f,'公开网络热梗')
-            self.assertEqual(call.await_count,1)
+            self.assertIn('API Key',result['error'])
+            call.assert_not_called()
         self.assertIn('error',await web_search.search(f,'查询验证码'))
 
     async def test_proactive_group_never_receives_private_material(self):

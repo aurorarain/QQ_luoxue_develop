@@ -267,7 +267,7 @@ def tieba_status():
 
 REGIONS = ('persona', 'memory', 'emotion', 'relation', 'interest', 'skill', 'goal')
 ACTIVITY_NAMES = {'read': '阅读', 'browse': '浏览贴吧', 'rest': '休息',
-                  'message': '主动私聊', 'none': '静观'}
+                  'stretch': '舒展', 'water': '照顾植物', 'message': '主动私聊', 'none': '静观'}
 
 
 def brain_payload(bot=None, now=None):
@@ -325,6 +325,23 @@ def brain_payload(bot=None, now=None):
         for name, value in values.items():
             add('e_' + kind + name, 'emotion', name, float(value) / 100, value=value, category=kind)
 
+    cognition = bot.get('cognition_view') or {}
+    signals = cognition.get('signals') or {}
+    for key, label in (('valence', '心情偏移'), ('arousal', '唤醒程度'),
+                       ('prediction', '奖赏预测误差'), ('stress', '压力反应')):
+        if key in signals:
+            value = round(float(signals[key]), 1)
+            add('c_' + key, 'emotion', label, .3 + abs(value) / 60, value=value, category='模拟信号')
+    episodes = (cognition.get('episodes') or [])[-24:]
+    for idx, row in enumerate(episodes):
+        nid = f'episode_{row["at"]}_{idx}'
+        add(nid, 'memory', row['label'], .3 + .7 * row['salience'],
+            at=row['at'], category='情景记忆', cues=row['cues'], pleasant=row['pleasant'],
+            surprise=row['surprise'], consolidated=bool(row.get('consolidated')), kws=row['cues'])
+        link(nid, 'c_valence', 'episode-affect', .5)
+        if abs(row['surprise']) >= .12:
+            link(nid, 'c_prediction', 'episode-reward', .6)
+
     for qq, row in (bot.get('people') or {}).items():
         count = int(row.get('count') or 0)
         add('r_' + str(qq), 'relation', row.get('name') or '群成员', min(1, count / 60),
@@ -348,6 +365,9 @@ def brain_payload(bot=None, now=None):
         done = sum(row['outcome'] == 'done' for row in history)
         add('s_' + action, 'skill', name, 0.75 if active else 0.15, enabled=active,
             attempts=len(history), completed=done, last=history[-1]['at'] if history else None)
+    for idx, row in enumerate(episodes):
+        if row.get('source') == 'life':
+            link(f'episode_{row["at"]}_{idx}', 's_' + row['key'].partition(':')[0], 'episode-action', .65)
     for key, label in {'voice': '语音', 'sticker': '表情包', 'face': 'QQ 表情',
                        'memory': '长期记忆', 'group_speak': '群聊主动接话'}.items():
         active = flags.get(key, True)
@@ -388,6 +408,16 @@ def brain_payload(bot=None, now=None):
               for row in reversed(audit[-10:])]
     return {'regions': regions, 'nodes': list(nodes.values()), 'links': list(links.values()),
             'stats': {'nodes': len(nodes), 'links': len(links)}, 'serverTime': now,
+            'cognition': {'at': cognition.get('at'), 'signals': signals,
+                          'episodes': [{key: row.get(key) for key in
+                                        ('at', 'label', 'cues', 'pleasant', 'surprise', 'mood', 'consolidated')}
+                                       for row in episodes],
+                          'activity': cognition.get('activity') or [],
+                          'emotions': cognition.get('emotions') or {},
+                          'needs': cognition.get('needs') or {},
+                          'reflections': cognition.get('reflections') or [],
+                          'decision': cognition.get('decision'),
+                          'consolidated': cognition.get('consolidated', 0)},
             'autonomy': {'enabled': enabled, 'nextAt': brain.get('next_at'),
                          'restUntil': brain.get('rest_until'), 'recent': latest}}
 
@@ -415,6 +445,54 @@ def read_json(path, default):
         return default
 
 
+def search_status():
+    config = read_json(os.path.join(PLUGIN_DIR, 'search-config.json'), {})
+    if not isinstance(config, dict):
+        config = {}
+    provider = config.get('provider', 'tavily')
+    bot = read_json(BOT_STATE, {})
+    usage = bot.get('web_usage_v2') or {}
+    import datetime
+    now = datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=8)))
+    return {'provider': provider,
+            'configured': bool(config.get(provider + '_api_key')),
+            'daily_limit': config.get('daily_limit', 25),
+            'monthly_limit': config.get('monthly_limit', 900),
+            'today': usage.get('count', 0) if usage.get('day') == now.strftime('%Y-%m-%d') else 0,
+            'month': usage.get('credits', 0) if usage.get('month') == now.strftime('%Y-%m') else 0}
+
+
+def save_search_config(payload):
+    import tempfile
+    if not isinstance(payload, dict) or payload.get('provider') not in ('tavily', 'brave'):
+        raise ValueError('请选择支持的搜索服务')
+    provider = payload['provider']
+    key = payload.get('api_key', '')
+    if not isinstance(key, str) or len(key) > 512 or any(ch.isspace() for ch in key):
+        raise ValueError('密钥格式不正确')
+    daily, monthly = int(payload.get('daily_limit', 25)), int(payload.get('monthly_limit', 900))
+    if not (1 <= daily <= 200 and 1 <= monthly <= 10000):
+        raise ValueError('每日上限应在 1–200，每月上限应在 1–10000')
+    path = os.path.join(PLUGIN_DIR, 'search-config.json')
+    config = read_json(path, {})
+    if not isinstance(config, dict):
+        config = {}
+    config.update(provider=provider, daily_limit=daily, monthly_limit=monthly)
+    if key:
+        config[provider + '_api_key'] = key
+    descriptor, temporary = tempfile.mkstemp(prefix='.search-config-', dir=PLUGIN_DIR)
+    try:
+        with os.fdopen(descriptor, 'w', encoding='utf-8') as handle:
+            json.dump(config, handle, ensure_ascii=False)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary, path)
+    finally:
+        if os.path.exists(temporary):
+            os.unlink(temporary)
+    return dict(search_status(), ok=True)
+
+
 class Handler(BaseHTTPRequestHandler):
     def _send(self, payload, code=200):
         body = json.dumps(payload, ensure_ascii=False).encode()
@@ -436,8 +514,11 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         path = urllib.parse.urlsplit(self.path).path
         authenticated = password_matches(self.headers.get('X-Password') or '')
-        if path in ('/roomapi/brain', '/roomapi/log', '/roomapi/full') and not authenticated:
+        if path in ('/roomapi/brain', '/roomapi/log', '/roomapi/full', '/roomapi/search/status') and not authenticated:
             self._send({'error': 'password'}, 403)
+            return
+        if path == '/roomapi/search/status':
+            self._send(search_status())
             return
         if self.path.startswith('/roomapi/state'):
             state = read_json(STATE, {})
@@ -551,6 +632,24 @@ class Handler(BaseHTTPRequestHandler):
         self._send({'error': 'not found'}, 404)
 
     def do_POST(self):
+        if urllib.parse.urlsplit(self.path).path == '/roomapi/search/config':
+            if not password_matches(self.headers.get('X-Password') or ''):
+                self._send({'ok': False, 'error': 'password'}, 403)
+                return
+            try:
+                length = int(self.headers.get('Content-Length') or 0)
+                if not 0 < length <= 4096:
+                    raise ValueError('请求大小不正确')
+                payload = json.loads(self.rfile.read(length).decode('utf-8'))
+                result = save_search_config(payload)
+            except (ValueError, TypeError):
+                self._send({'ok': False, 'error': '设置无效，请检查服务、密钥格式和用量范围'}, 400)
+                return
+            except OSError:
+                self._send({'ok': False, 'error': '设置保存失败'}, 500)
+                return
+            self._send(result)
+            return
         if self.path.startswith('/roomapi/node/heartbeat'):
             if (self.headers.get('X-Node-Token') or '') != node_token():
                 self._send({'ok': False, 'error': 'token'}, 403)

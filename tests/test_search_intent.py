@@ -18,7 +18,7 @@ class SearchIntent(unittest.TestCase):
 
     def test_casual_chat_does_not_trigger(self):
         for text in ['今天好累', '吃饭了吗', '哈哈哈哈哈', '晚安',
-                     '我的生日是什么时候', '记得我喜欢什么']:
+                     '我的生日是什么时候', '记得我喜欢什么', '你知道我很累', '听说你喜欢画画', '这个梗太好笑了']:
             self.assertFalse(web_search.search_intent(text), text)
 
     def test_secrets_never_trigger(self):

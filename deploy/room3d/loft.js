@@ -1,13 +1,13 @@
 import * as THREE from 'three';
 import {furnish} from './furniture.js';
-import {makeAvatar} from './avatar.js';
-import {DOOR_POSITION,makeDoor} from './doors.js';
+import {makeAvatar} from './avatar.js?v=bed-axis-3';
+import {doorApproach,makeDoor} from './doors.js';
 
 const names={living:'客厅',bedroom:'卧室',study:'书房',gaming:'电竞房',garden:'后花园',kitchen:'厨房'};
 const stand={living:[.60,0,.72],bedroom:[-.8,0,.31],study:[1.91,0,.71],gaming:[.56,0,-.66],
              garden:[.12,0,.39],kitchen:[1.33,0,-1.17]};
 const positions={
-  sleep:[-1.90,.90,-2.11],recline:[-1.90,.90,-2.11],
+  sleep:[-3.42,.78,-1.00],recline:[-3.42,.78,-1.00],
   sit:[-3.0,-.48,1.19],listen:[-3.0,-.48,1.19],watch:[-3.0,-.48,1.19],
   game:[.9,0,-1.05],browse:[.9,0,-1.05],wash:[.59,0,-1.65],cook:[2.44,0,-1.58],
   eat:[-.69,0,2.03],water:[-2.6,0,-.36],pet:[-1.35,0,2.31],unpack:[-.37,0,2.57],
@@ -70,7 +70,7 @@ export function mount(){
     if(focus){
       point.copy(louxue.root.position);
       point.y+=sleeping?.30:1.22;
-      if(sleeping)point.x-=1.03;
+      if(sleeping)point.z-=1.03;
     }
     point.add(panOffset);
     for(const key of ['x','y','z'])view[key]=THREE.MathUtils.lerp(view[key],point[key],smooth);
@@ -103,7 +103,10 @@ export function mount(){
     return b?{x:(a.x+b.x)/2,y:(a.y+b.y)/2,d:Math.hypot(a.x-b.x,a.y-b.y)}:a;
   }
   canvas.addEventListener('pointerdown',e=>{
-    if(!pointers.size)right=e.button===2||e.shiftKey;
+    if(!pointers.size){
+      dragDistance=0;
+      right=e.button===2||e.shiftKey;
+    }
     pointers.set(e.pointerId,{x:e.clientX,y:e.clientY});
     prior=gesture();canvas.setPointerCapture(e.pointerId);canvas.classList.add('dragging');
   });
@@ -215,7 +218,7 @@ export function mount(){
       const [id,position,pose]=locate(state);
       const movedRoom=actualRoom!==id, first=!receivedState;
       receivedState=true;
-      actualRoom=id;away=Boolean(state.away);sleeping=pose==='sleep';
+      actualRoom=id;away=Boolean(state.away);sleeping=['sleep','recline'].includes(pose);
       $('connection-label').textContent=away?'洛雪 · 外出中':'洛雪 · '+names[id];
       const weather=state.weather||{};
       $('weather').textContent=[state.clock,weather.kind,typeof weather.temp==='number'?weather.temp+'°C':''].filter(Boolean).join(' · ')||'洛雪的家';
@@ -224,11 +227,11 @@ export function mount(){
       if(Number.isFinite(newHour))hour=newHour;
       canvas.dataset.motion=pose;
       if(movedRoom&&!first&&following&&!away&&!reduce.matches){
-        louxue.poseAt(DOOR_POSITION,'stroll');
+        louxue.poseAt(doorApproach(currentRoom==='garden'),'stroll');
         setTimeout(()=>{
           if(!following||currentRoom===id){louxue.poseAt(position,pose,true);return;}
           through(id,()=>{
-            louxue.poseAt(DOOR_POSITION,'stroll',true);
+            louxue.poseAt(doorApproach(id==='garden'),'stroll',true);
             setTimeout(()=>louxue.poseAt(position,pose),90);
           });
         },500);

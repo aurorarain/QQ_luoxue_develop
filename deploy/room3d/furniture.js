@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import {DOOR_OPENING,GATE_CENTER} from './doors.js';
 import {block,cylinder,flat,group,line,mesh,oval,palette as p,shadow,texture} from './shapes.js';
 
 const brass='#c58e73', porcelain='#ffeadb', wall='#c7b6cd';
@@ -239,15 +240,22 @@ export function furnish(scene, kind='living'){
   const colors={bedroom:'#d4b9ca',study:'#bdc9ca',gaming:'#9a91b7',kitchen:'#ead5c9',living:wall};
   const roomWall=colors[kind];
   block(scene,9.70,3.13,.16,roomWall,0,1.55,-3.69,.04);
-  block(scene,.16,3.13,7.44,'#b9a5c6',-4.79,1.55,.0,.04);
+  const {wallX,center,width,height}=DOOR_OPENING;
+  const start=center-width/2,end=center+width/2;
+  const leftSegments=[[-3.72,start],[end,3.72]];
+  for(const [a,b] of leftSegments){
+    block(scene,.16,3.13,b-a,'#b9a5c6',wallX,1.55,(a+b)/2,.023);
+    block(scene,.061,.12,b-a,p.ivory,-4.67,.09,(a+b)/2,.018);
+    block(scene,.042,.048,b-a,'#d8c3d4',-4.677,1.30,(a+b)/2,.009);
+  }
+  block(scene,.16,3.12-height,width,'#b9a5c6',wallX,(3.12+height)/2,center,.018);
   block(scene,9.72,.13,.069,p.ivory,0,.08,-3.565,.018);
-  block(scene,.061,.12,7.43,p.ivory,-4.67,.09,0,.018);
   block(scene,9.76,.105,.24,p.cream,0,3.123,-3.68,.042);
   block(scene,.24,.105,7.44,p.cream,-4.79,3.123,0,.04);
   for(let i=0;i<9;i++){
-    block(scene,.035,1.13,.042,'#a894b8',-4.684,.72,-3.0+i*.78,.009);
+    const z=-3.0+i*.78;
+    if(z<start-.07 || z>end+.07)block(scene,.035,1.13,.042,'#a894b8',-4.684,.72,z,.009);
   }
-  block(scene,.042,.048,7.24,'#d8c3d4',-4.677,1.30,.03,.009);
   const windowX=-.16,windowY=2.04;
   block(scene,2.93,1.89,.074,p.walnut,windowX,windowY,-3.545,.04);
   const day=windowScene('day'),warm=windowScene('warm');
@@ -427,13 +435,15 @@ function garden(scene){
     const x=-4.5+i*.65;
     oval(scene,.53,.42,.42,['#789f86','#88ad8e','#9cb89d'][i%3],x,.48,-3.20);
   }
-  for(let i=0;i<7;i++){
-    const z=-2.8+i*.74;
+  for(const z of [-2.80,-2.06,-1.32,-.58,.04,GATE_CENTER-1.04,GATE_CENTER+1.04,3.30]){
     oval(scene,.48,.45,.46,'#89ae94',-4.33,.43,z);
   }
   for(let i=0;i<10;i++){
     const z=-2.55+i*.54,x=.27*Math.sin(i*.85);
     block(scene,.64+(i%2)*.13,.065,.38,i%2?'#d1c0b9':'#e2d1bf',x,.027,z,.07).rotation.y=Math.sin(i)*.25;
+  }
+  for(const [x,z] of [[-3.76,GATE_CENTER],[-3.21,1.94],[-2.62,2.18],[-2.04,2.30]]){
+    block(scene,.43,.065,.35,'#d9c9bf',x,.027,z,.067);
   }
   const pond=group(scene,2.62,0,1.16);
   oval(pond,1.49,.06,1.03,'#c0b3b6',0,.035,0);
@@ -452,7 +462,7 @@ function garden(scene){
     block(bench,1.69,.073,.13,p.oak,0,.49,-.17+i*.14,.030);
     block(bench,1.69,.106,.074,p.oak,0,.65+i*.114,-.23,.029);
   }
-  for(const [x,z] of [[-2.68,-2.52],[2.18,-2.64],[4.01,-1.74],[-3.63,2.39]]){
+  for(const [x,z] of [[-2.68,-2.52],[2.18,-2.64],[4.01,-1.74],[-3.63,3.09]]){
     plant(scene,x,0,z,1.28);
   }
   for(const [x,z] of [[-2.98,-.85],[3.29,2.58],[-2.88,2.79]]){

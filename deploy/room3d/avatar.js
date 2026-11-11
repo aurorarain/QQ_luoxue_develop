@@ -125,16 +125,18 @@ export function makeAvatar(layer,status){
     const walk=!snap&&delta>.07;
     const sway=reduce?0:Math.sin(t*3);
     const asleep=pose==='sleep'&&!walk;
+    const lying=(pose==='sleep'||pose==='recline')&&!walk;
     const seated=['sit','sit-read','listen','watch'].includes(pose);
     const sitting=seated&&!walk;
     const reading=(pose==='read'||pose==='sit-read')&&!walk;
     if(!vrm)return;
-    const look=walk?Math.atan2(goal.x-root.position.x,goal.z-root.position.z):asleep?.12:sitting?.43:.24;
+    const look=walk?Math.atan2(goal.x-root.position.x,goal.z-root.position.z):lying?0:sitting?.43:.24;
     const turn=Math.atan2(Math.sin(look-root.rotation.y),Math.cos(look-root.rotation.y));
     root.rotation.y+=turn*(snap?1:.16);
-    const lean=asleep||pose==='recline'?Math.PI/2:0;
-    body.rotation.z=THREE.MathUtils.lerp(body.rotation.z,lean,snap?1:.18);
-    body.position.y=asleep?0:walk?Math.abs(Math.sin(t*9))*.040:reduce?0:Math.sin(t*2)*.009;
+    // The bed runs along Z. Recline backwards so the head reaches the pillows and the face points up.
+    body.rotation.x=THREE.MathUtils.lerp(body.rotation.x,lying?-Math.PI/2+.06:0,snap?1:.18);
+    body.rotation.z=0;
+    body.position.y=lying?0:walk?Math.abs(Math.sin(t*9))*.040:reduce?0:Math.sin(t*2)*.009;
     rotate('head',reading?.19:['write','draw','phone','pet','eat','water','wash'].includes(pose)?.22:0,reduce?0:Math.sin(t*.88)*.075,pose==='listen'?sway*.12:reduce?0:Math.sin(t*.71)*.033);
     rotate('chest',pose==='pet'?.44:sitting?.07:0,0,reduce?0:Math.sin(t*1.6)*.018);
     const item=!walk&&held[pose];
@@ -169,7 +171,7 @@ export function makeAvatar(layer,status){
     if(t>blinkAt+.19)blinkAt=t+3.6;
     const blink=asleep?1:reduce||t<blinkAt?0:Math.sin(Math.min(1,(t-blinkAt)/.19)*Math.PI);
     vrm.expressionManager?.setValue('blink',blink);
-    book.visible=reading;shade.visible=!asleep&&!sitting;
+    book.visible=reading;shade.visible=!lying&&!sitting;
     vrm.update(dt);
   }
   return {root,poseAt:setPose,update,retry:load};

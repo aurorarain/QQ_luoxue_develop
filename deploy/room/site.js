@@ -6,8 +6,7 @@
     ['home','房间','/'],['brain','大脑','/brain.html'],['log','日志','/log.html'],['console','控制台','/console.html'],
   ];
   const extra=[
-    ['runtime','运行日志','/runtime.html'],['pixel','像素房间','/pixel-room.html'],['voices','音色试听','/voices.html'],
-    ['tieba','贴吧节点','/tieba-login.html'],['doubao','豆包登录','/doubao-login.html'],
+    ['runtime','运行日志','/runtime.html'],['tieba','贴吧节点','/tieba-login.html'],
   ];
   function link([id,label,href]){
     const el=document.createElement('a');el.href=href;el.textContent=label;
