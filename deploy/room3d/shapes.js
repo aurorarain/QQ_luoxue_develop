@@ -5,8 +5,36 @@ export const palette = {
   cream:'#f9e3cc', ivory:'#fff4e6', oak:'#bd8e77', walnut:'#6d505b', peach:'#de9e90',
 };
 const materials=new Map(), boxes=new Map(), sphere=new THREE.SphereGeometry(1,24,16);
+const fabrics=new Set([palette.plum,palette.lilac,palette.mauve,'#c6a7c6','#b48fb9','#9d80a7','#c3a7ca','#aa8ab7']);
+let woodGrain,fabricWeave;
+function surfaceMap(wood){
+  if(wood&&woodGrain)return woodGrain;
+  if(!wood&&fabricWeave)return fabricWeave;
+  const map=texture(256,256,(c,w,h)=>{
+    c.fillStyle='#f4f4f4';c.fillRect(0,0,w,h);
+    if(wood){
+      for(let i=0;i<70;i++){
+        c.strokeStyle=i%3?'#79797915':'#ffffff55';c.lineWidth=i%4===0?1.2:.5;
+        c.beginPath();for(let x=0;x<=w;x+=8)c.lineTo(x,i*4+Math.sin(x/47+i*.8)*2.5);c.stroke();
+      }
+    }else{
+      for(let i=0;i<w;i+=4){
+        c.fillStyle=i%8?'#cecece70':'#ffffff88';c.fillRect(i,0,1,h);c.fillRect(0,i,w,1);
+      }
+    }
+  });
+  map.wrapS=map.wrapT=THREE.RepeatWrapping;map.repeat.set(2,2);
+  if(wood)woodGrain=map;else fabricWeave=map;
+  return map;
+}
 export function material(color){
-  if(!materials.has(color))materials.set(color,new THREE.MeshStandardMaterial({color,roughness:.78}));
+  if(!materials.has(color)){
+    const wood=color===palette.oak||color===palette.walnut,fabric=fabrics.has(color);
+    const metallic=color==='#c58e73';
+    const options={color,roughness:fabric?.94:wood?.68:metallic?.36:.76,metalness:metallic?.24:0};
+    if(wood||fabric){options.map=options.bumpMap=surfaceMap(wood);options.bumpScale=wood?.008:.004;}
+    materials.set(color,new THREE.MeshStandardMaterial(options));
+  }
   return materials.get(color);
 }
 export function mesh(parent,geometry,color,x=0,y=0,z=0){

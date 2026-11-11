@@ -43,6 +43,7 @@ export function makeAvatar(layer,status){
   root.position.copy(goal);
   let pose='idle',vrm=null,bones={},directions={},blinkAt=2.7,snapNext=true;
   let loading=false;
+  let feeling='relaxed',expression=0;
   function load(){
     if(loading||vrm)return;
     loading=true;status('loading');
@@ -67,15 +68,21 @@ export function makeAvatar(layer,status){
       avatar.scene.traverse(obj=>{
         if(!obj.isMesh)return;
         obj.frustumCulled=false;
+        obj.castShadow=true;obj.receiveShadow=true;
         for(const material of [].concat(obj.material)){
           if(material?.isMToonMaterial&&!materials.has(material)){
             material.color.multiplyScalar(.88);
+            if(typeof material.outlineWidthFactor==='number')material.outlineWidthFactor*=.75;
+            if(material.map)material.map.anisotropy=4;
             materials.add(material);
           }
         }
       });
       const names=['hips','spine','chest','neck','head','leftUpperArm','rightUpperArm','leftLowerArm','rightLowerArm',
                    'leftHand','rightHand','leftUpperLeg','rightUpperLeg','leftLowerLeg','rightLowerLeg'];
+      for(const side of ['left','right'])for(const finger of ['Thumb','Index','Middle','Ring','Little']){
+        for(const segment of ['Proximal','Intermediate','Distal'])names.push(side+finger+segment);
+      }
       bones=Object.fromEntries(names.map(name=>[name,avatar.humanoid.getNormalizedBoneNode(name)]));
       if(!bones.head||!bones.leftUpperArm||!bones.rightUpperArm)throw new Error('Incomplete avatar rig');
       for(const side of ['left','right']){
@@ -126,11 +133,12 @@ export function makeAvatar(layer,status){
     const sway=reduce?0:Math.sin(t*3);
     const asleep=pose==='sleep'&&!walk;
     const lying=(pose==='sleep'||pose==='recline')&&!walk;
-    const seated=['sit','sit-read','listen','watch'].includes(pose);
+    const seated=['sit','sit-read','listen','watch','game','browse','write','draw'].includes(pose);
     const sitting=seated&&!walk;
     const reading=(pose==='read'||pose==='sit-read')&&!walk;
     if(!vrm)return;
-    const look=walk?Math.atan2(goal.x-root.position.x,goal.z-root.position.z):lying?0:sitting?.43:.24;
+    const facingWork=['game','browse','write','draw','wash','cook','window','shelve','dress','eat'].includes(pose);
+    const look=walk?Math.atan2(goal.x-root.position.x,goal.z-root.position.z):lying?0:facingWork?Math.PI:sitting?.43:.24;
     const turn=Math.atan2(Math.sin(look-root.rotation.y),Math.cos(look-root.rotation.y));
     root.rotation.y+=turn*(snap?1:.16);
     // The bed runs along Z. Recline backwards so the head reaches the pillows and the face points up.
@@ -138,7 +146,9 @@ export function makeAvatar(layer,status){
     body.rotation.z=0;
     body.position.y=lying?0:walk?Math.abs(Math.sin(t*9))*.040:reduce?0:Math.sin(t*2)*.009;
     rotate('head',reading?.19:['write','draw','phone','pet','eat','water','wash'].includes(pose)?.22:0,reduce?0:Math.sin(t*.88)*.075,pose==='listen'?sway*.12:reduce?0:Math.sin(t*.71)*.033);
-    rotate('chest',pose==='pet'?.44:sitting?.07:0,0,reduce?0:Math.sin(t*1.6)*.018);
+    const breath=reduce?0:Math.sin(t*1.55)*.008;
+    rotate('chest',(pose==='pet'?.44:sitting?.07:0)+breath,0,reduce?0:Math.sin(t*1.6)*.010);
+    rotate('hips',0,0,lying||sitting||walk||reduce?0:Math.sin(t*.71)*.009);
     const item=!walk&&held[pose];
     for(const prop of Object.values(props))prop.visible=false;
     if(item){
@@ -167,12 +177,27 @@ export function makeAvatar(layer,status){
       }
       rotate(side+'UpperLeg',sitting?1.45:step*.36,0,0);
       rotate(side+'LowerLeg',sitting?-1.28:-Math.max(0,-step*.27),0,0);
+      rotate(side+'Hand',0,0,sign*(item?-.04:.025));
+      for(const finger of ['Index','Middle','Ring','Little']){
+        const curl=item?.26:lying?.12:.17;
+        rotate(side+finger+'Proximal',0,0,-sign*curl);
+        rotate(side+finger+'Intermediate',0,0,-sign*curl*.65);
+        rotate(side+finger+'Distal',0,0,-sign*curl*.35);
+      }
     }
     if(t>blinkAt+.19)blinkAt=t+3.6;
     const blink=asleep?1:reduce||t<blinkAt?0:Math.sin(Math.min(1,(t-blinkAt)/.19)*Math.PI);
     vrm.expressionManager?.setValue('blink',blink);
+    expression=THREE.MathUtils.lerp(expression,asleep?0:feeling==='relaxed'?.13:.34,1-Math.exp(-dt*3));
+    for(const name of ['happy','sad','angry','surprised','relaxed']){
+      vrm.expressionManager?.setValue(name,name===feeling?expression:0);
+    }
     book.visible=reading;shade.visible=!lying&&!sitting;
     vrm.update(dt);
   }
-  return {root,poseAt:setPose,update,retry:load};
+  return {root,poseAt:setPose,update,retry:load,setMood(state){
+    const mood=String(state.mood||'');
+    feeling=/难过|低落|委屈|伤心/.test(mood)?'sad':/生气|恼火|烦躁/.test(mood)?'angry':
+      /惊讶|吃惊/.test(mood)?'surprised':/开心|高兴|愉快|心情很好|嘴角/.test(mood)?'happy':'relaxed';
+  }};
 }

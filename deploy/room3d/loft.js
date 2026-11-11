@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import {furnish} from './furniture.js';
+import {furnish} from './furniture.js?v=bedding-1';
 import {makeAvatar} from './avatar.js?v=bed-axis-3';
 import {doorApproach,makeDoor} from './doors.js';
 
@@ -9,7 +9,9 @@ const stand={living:[.60,0,.72],bedroom:[-.8,0,.31],study:[1.91,0,.71],gaming:[.
 const positions={
   sleep:[-3.42,.78,-1.00],recline:[-3.42,.78,-1.00],
   sit:[-3.0,-.48,1.19],listen:[-3.0,-.48,1.19],watch:[-3.0,-.48,1.19],
-  game:[.9,0,-1.05],browse:[.9,0,-1.05],wash:[.59,0,-1.65],cook:[2.44,0,-1.58],
+  game:[.9,-.60,-1.57],browse:[.9,-.60,-1.57],
+  write:[1.13,-.63,.56],draw:[1.13,-.63,.56],
+  wash:[.59,0,-1.65],cook:[2.44,0,-1.58],
   eat:[-.69,0,2.03],water:[-2.6,0,-.36],pet:[-1.35,0,2.31],unpack:[-.37,0,2.57],
   window:[-.10,0,-2.13],shelve:[3.86,0,-1.94],dress:[2.64,0,-1.55],
 };
@@ -27,9 +29,11 @@ export function mount(){
   const canvas=$('scene'), renderer=new THREE.WebGLRenderer({canvas,antialias:true,alpha:true});
   renderer.setClearColor(0x000000,0);
   renderer.setPixelRatio(Math.min(devicePixelRatio,1.5));
+  renderer.shadowMap.enabled=true;
+  renderer.shadowMap.type=THREE.PCFSoftShadowMap;
   renderer.outputColorSpace=THREE.SRGBColorSpace;
   renderer.toneMapping=THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure=1.22;
+  renderer.toneMappingExposure=1.10;
   const camera=new THREE.OrthographicCamera(-6,6,4,-4,.1,90);
   const roomCache=new Map();
   const avatarLayer=new THREE.Group();
@@ -48,7 +52,21 @@ export function mount(){
     const world=furnish(scene,id);
     const ambient=new THREE.HemisphereLight('#fdf0f7','#745a85',2.05);scene.add(ambient);
     const sun=new THREE.DirectionalLight('#ffe0c9',2.65);sun.position.set(1.9,7,4.6);scene.add(sun);
-    const rim=new THREE.DirectionalLight('#bcb3ff',1.18);rim.position.set(-4,4,-2);scene.add(rim);
+    const rim=new THREE.DirectionalLight('#d2c9ee',.78);rim.position.set(-4,4,-2);scene.add(rim);
+    sun.castShadow=true;
+    sun.shadow.mapSize.setScalar(innerWidth<700?1024:2048);
+    Object.assign(sun.shadow.camera,{left:-6.4,right:6.4,top:6.4,bottom:-6.4,near:.5,far:22});
+    sun.shadow.bias=-.00025;sun.shadow.normalBias=.022;sun.shadow.radius=3;
+    scene.traverse(object=>{
+      if(!object.isMesh)return;
+      const materials=[].concat(object.material);
+      if(materials.some(material=>material.transparent))return;
+      object.receiveShadow=true;
+      object.geometry.computeBoundingBox();
+      const size=object.geometry.boundingBox.getSize(new THREE.Vector3()).multiply(object.scale);
+      const largest=Math.max(size.x,size.y,size.z);
+      object.castShadow=largest>.10&&largest<4.4;
+    });
     const room={scene,world,ambient,sun,door:makeDoor(scene,id==='garden')};
     roomCache.set(id,room);
     return room;
@@ -82,7 +100,7 @@ export function mount(){
   }
   function preset(close){
     focus=close&&!away;panOffset.set(0,0,0);
-    Object.assign(target,{yaw:focus?.25:.47,pitch:focus?.18:.64,zoom:1,x:.06,y:.96,z:.02});
+    Object.assign(target,{yaw:focus?.25:.47,pitch:focus?(sleeping?.70:.18):.64,zoom:1,x:.06,y:.96,z:.02});
     $('louxue').setAttribute('aria-pressed',String(focus));$('room').setAttribute('aria-pressed',String(!focus));
   }
   function zoom(factor){target.zoom=clamp(target.zoom*factor,.60,3.1);}
@@ -198,8 +216,8 @@ export function mount(){
     isWarm=override??(hour>=19||hour<7);
     const {world,sun,ambient}=active;
     world.setWarm(isWarm);
-    sun.color.set(isWarm?'#ffd0a8':'#ffe0c9');sun.intensity=isWarm?1.63:2.65;
-    ambient.intensity=isWarm?1.37:2.05;
+    sun.color.set(isWarm?'#ffddbb':'#ffe8d6');sun.intensity=isWarm?1.47:2.35;
+    ambient.intensity=isWarm?1.25:1.85;
     $('lighting').setAttribute('aria-pressed',String(isWarm));
     $('lighting').textContent=isWarm?'日光':'暖灯';
   }
@@ -219,6 +237,8 @@ export function mount(){
       const movedRoom=actualRoom!==id, first=!receivedState;
       receivedState=true;
       actualRoom=id;away=Boolean(state.away);sleeping=['sleep','recline'].includes(pose);
+      louxue.setMood(state);
+      roomFor('bedroom').world.setResting(id==='bedroom'&&sleeping&&!away);
       $('connection-label').textContent=away?'洛雪 · 外出中':'洛雪 · '+names[id];
       const weather=state.weather||{};
       $('weather').textContent=[state.clock,weather.kind,typeof weather.temp==='number'?weather.temp+'°C':''].filter(Boolean).join(' · ')||'洛雪的家';

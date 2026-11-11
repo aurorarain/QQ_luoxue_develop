@@ -1,5 +1,7 @@
 import * as THREE from 'three';
 import {DOOR_OPENING,GATE_CENTER} from './doors.js';
+import {makeBedding} from './bedding.js?v=bedding-1';
+import {refineRoom} from './details.js?v=home-craft-1';
 import {block,cylinder,flat,group,line,mesh,oval,palette as p,shadow,texture} from './shapes.js';
 
 const brass='#c58e73', porcelain='#ffeadb', wall='#c7b6cd';
@@ -131,19 +133,18 @@ function bed(scene){
   block(g,2.22,.28,2.71,p.walnut,0,.24,0,.08);
   for(const x of [-.9,.9])for(const z of [-1.05,1.05])cylinder(g,.06,.051,.18,brass,x,.09,z);
   block(g,2.24,.91,.17,p.plum,0,.68,-1.32,.11);
-  block(g,2.06,.21,2.48,p.ivory,0,.484,-.022,.10);
-  block(g,2.045,.153,1.61,p.lilac,0,.626,.38,.088);
-  block(g,2.067,.102,.27,'#dbbdd5',0,.696,-.40,.055);
-  block(g,2.04,.083,.23,'#99789f',0,.706,.91,.04);
-  for(const x of [-.49,.49]){
-    const cushion=block(g,.82,.20,.48,x<0?p.ivory:'#edd4e2',x,.666,-.87,.095);cushion.rotation.y=x*.14;
+  for(const x of [-.75,-.25,.25,.75]){
+    block(g,.46,.66,.075,'#9a789f',x,.72,-1.215,.08);
+    for(const y of [.54,.89])oval(g,.018,.018,.011,'#c5a2bd',x,y,-1.168);
   }
-  for(let i=0;i<6;i++)block(g,1.86,.012,.014,'#c9acd0',0,.709,-.23+i*.225,.004);
+  block(g,2.06,.21,2.48,p.ivory,0,.484,-.022,.10);
+  block(g,2.055,.035,2.43,'#f1dfe6',0,.605,-.022,.014);
+  const bedding=makeBedding(g);
   const stand=group(scene,-4.27,0,-2.79);
   block(stand,.55,.49,.60,p.oak,0,.26,0,.08);
   block(stand,.51,.023,.54,p.cream,0,.518,0,.016);
   block(stand,.12,.029,.041,brass,0,.3,.312,.007);
-  return lamp(stand,0,.53,0);
+  return Object.assign(lamp(stand,0,.53,0),bedding);
 }
 
 function sofa(scene){
@@ -186,7 +187,9 @@ function desk(scene,gaming=false){
     flat(monitor,.951,.51,map,0,.50,.052);
   }
   block(g,.87,.037,.23,'#e6c4d3',-.16,1.016,.246,.018);
-  for(let i=0;i<8;i++)block(g,.063,.009,.057,'#fff0e8',-.49+i*.094,1.039,.246,.004);
+  for(let row=0;row<4;row++)for(let i=0;i<12;i++){
+    block(g,.055,.011,.039,(i+row)%7===0?'#c4afd2':'#fff0e8',-.528+i*.067,1.040,.164+row*.047,.004);
+  }
   oval(g,.072,.027,.11,p.navy,.45,1.016,.26);
   plant(g,1.00,1.008,-.25,.60);
   cylinder(g,.074,.06,.132,p.cream,.77,1.057,.27);
@@ -235,7 +238,10 @@ function accessories(scene){
 }
 
 export function furnish(scene, kind='living'){
-  if(kind==='garden')return garden(scene);
+  if(kind==='garden'){
+    const world=garden(scene),details=refineRoom(scene,kind);
+    return {animate:details.animate,setWarm(on){world.setWarm(on);details.setWarm(on);}};
+  }
   floor(scene,kind!=='kitchen'&&kind!=='gaming',kind==='kitchen'?'stone':'oak');
   const colors={bedroom:'#d4b9ca',study:'#bdc9ca',gaming:'#9a91b7',kitchen:'#ead5c9',living:wall};
   const roomWall=colors[kind];
@@ -280,13 +286,14 @@ export function furnish(scene, kind='living'){
   plant(shelf,-.52,.05,.012,.52);
   for(let i=0;i<5;i++)block(shelf,.113,.33+i*.025,.24,i%2?p.lilac:p.cream,-.15+i*.145,.23+i*.012,.01,.017);
   const lamps=[];
-  let animate=()=>{};
+  let animate=()=>{},setResting=()=>{};
   if(kind==='living'){
     lamps.push(sofa(scene));
     animate=accessories(scene);
     mediaCabinet(scene);
   }else if(kind==='bedroom'){
-    lamps.push(bed(scene));
+    const bedding=bed(scene);lamps.push(bedding);
+    animate=bedding.animate;setResting=bedding.setResting;
     wardrobe(scene);
     plant(scene,3.85,0,1.95,1.26);
   }else if(kind==='study'){
@@ -299,8 +306,10 @@ export function furnish(scene, kind='living'){
   }else if(kind==='kitchen'){
     lamps.push(kitchen(scene));
   }
-  return {animate,setWarm(on){
+  const details=refineRoom(scene,kind);
+  return {animate(t){animate(t);details.animate(t);},setResting,setWarm(on){
     view.material.map=on?warm:day;view.material.needsUpdate=true;
+    details.setWarm(on);
     for(const {shade,light} of lamps){shade.emissiveIntensity=on?.9:.28;light.intensity=(on?1.4:.45)*(light.distance);}
   }};
 }
