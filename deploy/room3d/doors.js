@@ -25,8 +25,13 @@ export function makeDoor(scene,garden){
   oval(leaf,.057,.057,.055,'#ce9d75',width-.14,height*.47,.105);
   const hit=mesh(frame,new THREE.BoxGeometry(width+.23,height+.16,.30),
     new THREE.MeshBasicMaterial({transparent:true,opacity:0,depthWrite:false}),0,height/2,.06);
-  let target=0;
-  return {hit,open(){target=-Math.PI*.43;},close(){target=0;},update(dt,reduce){
+  let target=0,resolve=null;
+  function move(value){
+    resolve?.(false);target=value;
+    return new Promise(done=>{resolve=done;if(Math.abs(leaf.rotation.y-target)<.012){resolve(true);resolve=null;}});
+  }
+  return {hit,open(){return move(-Math.PI*.43);},close(){return move(0);},update(dt,reduce){
     leaf.rotation.y=THREE.MathUtils.lerp(leaf.rotation.y,target,reduce?1:1-Math.exp(-dt*9));
+    if(Math.abs(leaf.rotation.y-target)<.012){resolve?.(true);resolve=null;}
   }};
 }

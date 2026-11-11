@@ -90,12 +90,23 @@ export function makeBedding(parent){
     }
     return root;
   });
-  let resting=false;
+  // Both meshes have matching topology, including the piping: morph the whole bedding instead of swapping it.
+  const morphs=[];
+  variants[1].visible=false;
+  variants[0].children.forEach((item,index)=>{
+    const target=variants[1].children[index].geometry;
+    item.geometry.morphAttributes.position=[target.attributes.position];
+    if(target.attributes.normal)item.geometry.morphAttributes.normal=[target.attributes.normal];
+    item.updateMorphTargets();morphs.push(item);
+  });
+  let resting=0;
   return {
-    setResting(on){
-      resting=Boolean(on);variants[0].visible=!resting;variants[1].visible=resting;
-      pillows[0].scale.y=resting?.9:1;
+    setResting(value){
+      resting=THREE.MathUtils.clamp(Number(value),0,1);
+      variants[0].visible=true;
+      for(const item of morphs)item.morphTargetInfluences[0]=resting;
+      pillows[0].scale.y=1-resting*.1;
     },
-    animate(t){variants[1].position.y=resting?Math.sin(t*1.55)*.003:0;},
+    animate(t){variants[0].position.y=Math.sin(t*1.55)*.003*resting;},
   };
 }

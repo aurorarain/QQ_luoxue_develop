@@ -80,7 +80,7 @@ button:hover,.nav a:hover,button[aria-pressed=true]{background:#b89de230;border-
 </div>
 <div class="card" id="fallback" hidden><strong>3D 场景暂不可用</strong><p class="dim">可以先看看洛雪最近的活动。</p><a class="fallback-link" href="/log.html">打开生活日志</a></div>
 <script type="module">
-import('/room3d/house-craft/loft.js').then(module=>module.mount()).catch(error=>{
+import('/room3d/house-motion/loft.js').then(module=>module.mount()).catch(error=>{
   console.error(error);
   document.getElementById('fallback').hidden=false;
 });

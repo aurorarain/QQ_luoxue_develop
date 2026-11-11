@@ -194,7 +194,7 @@ function desk(scene,gaming=false){
   plant(g,1.00,1.008,-.25,.60);
   cylinder(g,.074,.06,.132,p.cream,.77,1.057,.27);
   mesh(g,new THREE.TorusGeometry(.047,.012,8,18),p.cream,.844,1.057,.27);
-  const chair=group(scene,gaming?.9:2.22,0,-1.57);
+  const chair=group(scene,gaming?.9:2.22,0,gaming?-2.00:-1.57);
   chair.rotation.y=-.29;
   cylinder(chair,.075,.105,.54,p.walnut,0,.29,0);
   cylinder(chair,.27,.29,.065,brass,0,.042,0);
@@ -307,7 +307,13 @@ export function furnish(scene, kind='living'){
     lamps.push(kitchen(scene));
   }
   const details=refineRoom(scene,kind);
-  return {animate(t){animate(t);details.animate(t);},setResting,setWarm(on){
+  const potLid=scene.getObjectByName('cooking-lid');
+  return {animate(t){animate(t);details.animate(t);},setResting,setAction(frame){
+    if(!potLid)return;
+    const amount=frame.action==='cook'&&['perform','put-away'].includes(frame.stage)?frame.engagement:0;
+    potLid.rotation.z=-amount*.80;
+    potLid.position.set(.63+amount*.36,1.213+amount*.025,-.15);
+  },setWarm(on){
     view.material.map=on?warm:day;view.material.needsUpdate=true;
     details.setWarm(on);
     for(const {shade,light} of lamps){shade.emissiveIntensity=on?.9:.28;light.intensity=(on?1.4:.45)*(light.distance);}
@@ -367,7 +373,7 @@ function readingDesk(scene){
   block(notebook,.67,.034,.393,p.ivory,0,.041,0,.014);
   for(let i=0;i<5;i++)block(notebook,.49,.006,.008,'#aa9eae',0,.061,-.145+i*.063,.002);
   plant(g,.84,.951,-.17,.51);
-  const stool=group(scene,1.13,0,.56);
+  const stool=group(scene,1.4,0,.02);
   block(stool,.69,.13,.66,p.lilac,0,.478,0,.068);
   for(const x of [-.27,.27])for(const z of [-.24,.24])cylinder(stool,.035,.029,.43,brass,x,.221,z);
   return lamp(g,-.87,.949,-.18);
@@ -419,8 +425,10 @@ function kitchen(scene){
   block(g,1.15,.043,.60,p.navy,.43,.997,-.075,.038);
   for(const x of [.16,.71])for(const z of [-.20,.035])cylinder(g,.094,.094,.012,'#646a81',x,1.027,z);
   cylinder(g,.233,.206,.181,'#b88a9f',.63,1.107,-.15);
-  cylinder(g,.243,.234,.028,p.cream,.63,1.213,-.15);
-  oval(g,.045,.042,.049,p.walnut,.63,1.248,-.15);
+  for(const x of [.37,.89]){const handle=mesh(g,new THREE.TorusGeometry(.062,.013,8,18),'#997086',x,1.13,-.15);handle.rotation.y=Math.PI/2;}
+  const lid=group(g,.63,1.213,-.15);lid.name='cooking-lid';
+  cylinder(lid,.243,.234,.028,p.cream);
+  oval(lid,.045,.042,.049,p.walnut,0,.035,0);
   block(g,.53,.04,.35,p.oak,1.67,.996,.096,.025);
   for(let i=0;i<3;i++)oval(g,.064,.035,.065,'#dca188',1.59+i*.10,1.046,.09);
   const fridge=group(scene,-3.57,0,-2.75);
