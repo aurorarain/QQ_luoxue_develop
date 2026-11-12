@@ -68,7 +68,8 @@ class AutonomousSearch(unittest.IsolatedAsyncioTestCase):
 
     async def test_exhausted_budget_blocks_network(self):
         now=dt.datetime.now(ZoneInfo('Asia/Shanghai'))
-        f=self.feature('search','公开资料',web_usage_v2={'day':now.strftime('%Y-%m-%d'),'count':25})
+        f=self.feature('search','公开资料',web_usage_v2={'day':now.strftime('%Y-%m-%d'),'count':25},
+            web_page_usage={'day':now.strftime('%Y-%m-%d'),'count':20})
         with patch.object(web_search,'search',AsyncMock()) as call:
             await web_search.automatic_context(f,'想查点资料','group','speaker-a')
         call.assert_not_awaited();f.s.generate.assert_not_awaited()

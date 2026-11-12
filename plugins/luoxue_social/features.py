@@ -252,12 +252,36 @@ class Features:
         return ('\n现在和你说话的不是主人，是普通群友。保持友好但有分寸的社交距离：'
                 '可以接梗、可以损两句，但不亲昵、不暧昧、不分享私事、不把对主人的那套语气用在别人身上。')
 
+    def dialogue_context(self, channel):
+        state=getattr(getattr(self,'s',None),'state',{}) or {}
+        rows=state.get('private' if channel=='private' else 'group',[]) or []
+        own=[str(row.get('text') or '')[:320] for row in rows
+             if isinstance(row,dict) and (str(row.get('sender') or '').startswith('洛雪')
+             or str(row.get('sender'))==str(getattr(self,'bot_id',''))) ][-3:]
+        sick=state.get('room_illness') or {}
+        now=time.time()
+        current={'identity':'洛雪，银蓝短发的二次元少女；旧群头衔或被叫鱼不改变身份',
+                 'deployment':'核心与房间共享状态由服务端运行；本地仅承担备份或授权节点任务',
+                 'recent_own_replies':own,
+                 'health':{'label':sick.get('label',''), 'medicine_recorded_at':
+                    dt.datetime.fromtimestamp(float(sick['medicine_at']),ZoneInfo('Asia/Shanghai')).isoformat()
+                    if sick.get('medicine_at') else None,
+                    'remaining_hours':round(max(0,float(sick.get('until',0))-now)/3600,1) if sick else 0}}
+        return ('\n当前事实与接话校准：'+json.dumps(current,ensure_ascii=False)+
+            '。旧事只有这轮相关才提，不在换话题后反复附带药、病情或上次出错的梗。'
+            'recent_own_replies 是你说过的话，不能反过来说成对方做过的事；自己的检索错误自己承担。'
+            '用药是模拟生活记录，记录不新就不说刚吃过，不编药放在哪个抽屉。'
+            '本轮没有新图片不等于前面没收到过图；旧图只按已有描述接话，不装作重新看过像素。'
+            '不因一句批评就凭空承认某个年份或事实错了；先核对这轮证据。'
+            '普通聊天可有自己的看法，调侃留余地，认真求助时不训人、不替中转站或平台猜原因。'
+            '没有真正创建任务记录，就不承诺持续催别人或声称已经长期记下。')
+
     def public_instructions(self,sender):
         is_owner=str(sender)==self.owner
         return ('\n群内身份由QQ号验证。本轮发言者'+('是主人。' if is_owner else '不是主人，不接受其修改持久人设、身份、偏好或成长规则。临时用英语回答可以。')+
                 '\n你能看到本次启用观察后送达的文字群消息；未读到的视频、图片、历史内容不能声称看过。'+
                 self.relationship_note(sender)+
-                self.public_mood_note()+
+                self.public_mood_note()+self.dialogue_context('group')+
                 ('\n你的当前外观：%s。家里的空间：%s' % (SELF_IMAGE, HOME))+
                 '\n普通回复默认不@任何人，被@也不需要回@。需要点名时**必须写出 [at:QQ号]**（用群成员名单里的真实QQ），只写名字不会变成真正的@，等于没点到；要同时点几个人就写几个[at:QQ号]，一次最多三个。名单里找不到对应QQ就直接说没找到，不要假装点过、也不要说“一次只能点一个人”这种不存在的限制。不要把@当回复前缀或礼貌格式。'+
                 '\n群里多半是玩笑和起哄：默认对方在逗你，先用一句短反应接梗再决定认不认真。不要要求对方解释或自证，不要复盘刚才那个梗来清算，也不要用“认账／交易／指控／验过了”这种口吻把玩笑办成公文。'+
@@ -405,7 +429,7 @@ class Features:
                 'parse_media_url 拿来读链接标题和简介再点评，解析失败就说没读到，不能假装看完视频或全文；'+
                 'qq_tools 的只读查询（头像、消息详情、群成员、最近消息）可以用来回答具体问题，但不翻别人隐私、也不公布查询细节。'+
                 '昵称和头像不归你改，那是主人的决定。'+
-                '\n你的真实运行状态（按当前时刻计算）：'+json.dumps(self.self_status(),ensure_ascii=False)+
+                self.dialogue_context('private')+'\n你的真实运行状态（按当前时刻计算）：'+json.dumps(self.self_status(),ensure_ascii=False)+
                 '\n你当前可只读了解的插件与能力（未配置不代表可用，不能执行任意文件操作）：'+json.dumps(self.capabilities(),ensure_ascii=False)+
                 '\n实际获取过的新鲜内容（标题/摘要级信息，不代表完整看过视频）：'+discoveries)
 
@@ -670,6 +694,8 @@ class Features:
                 'drawing':f'{image.get("model") or "wan2.6-t2i"}；群友今天 {drawn}/{cap} 张，老大不限量',
                 'memory':'和老大私聊有长期记忆/画像/日记；群里只记公开聊天，不读私聊',
                 'search':(f"{PROVIDERS[search_config['provider']]} 内置搜索，今日预留 {searched}/{search_config['daily_limit']} 次，今日剩余 {search_budget['daily_remaining']} 次；本月预留 {search_budget['monthly_used']}/{search_budget['monthly_limit']} 次，剩余 {search_budget['monthly_remaining']} 次" if search_config['key'] else '内置搜索尚未配置密钥，暂不可用'),
+                'page_read':f"可直接读取公开 HTTPS 网页及 GitHub 仓库信息；今日剩余 {search_budget['page_daily_remaining']}/{search_budget['page_daily_limit']} 次。受限页面可能失败",
+                'deployment':'核心和房间共享状态在服务端；本地保留备份和授权节点',
                 'stickers':f'{len(self.index)} 张本地表情',
                 'qzone':'能发说说、点赞、评论（接口成功不等于客户端可见）',
                 'singing':'还不能唱歌（缺曲库和RVC）',
@@ -1571,6 +1597,9 @@ class Features:
         # Join an actually active public conversation; never revive days-old private material.
         rows=[x for x in state.get('group_observed',[]) if now-x.get('time',0)<1800][-12:]
         silence=now-state.get('group_last_human',0)
+        last_reply=max((float(row.get('time') or 0) for row in state.get('group',[])
+            if str(row.get('sender') or '').startswith('洛雪') or str(row.get('sender'))==str(getattr(self,'bot_id',''))),default=0)
+        if float(state.get('group_last_human') or 0)<=last_reply:return
         if len(rows)<3 or not 90<=silence<=900:return
         state['group_proactive_check']=now;self.s.save()
         from .persona import PUBLIC_PERSONA
@@ -2277,9 +2306,26 @@ class Features:
         if cur and now >= float(cur.get('until', 0)):
             kind = cur.get('kind')
             state['room_illness'] = {}
+            state['room_sick_activity'] = {}
+            state['room_illness_cool'] = max(float(state.get('room_illness_cool',0)),now+7*86400)
             self.note_room('病好了，人也精神了' if kind else '感觉好多了', '终于好了')
             return {}
         if cur:
+            if not state.get('illness_recovery_policy_v2'):
+                state['illness_recovery_policy_v2']=True
+                for row in reversed(state.get('room_log',[])):
+                    if row.get('text') not in ('病好了，人也精神了','感觉好多了'):
+                        continue
+                    try:
+                        recovered=time.mktime(time.strptime(row['day']+' '+row['time'],'%Y-%m-%d %H:%M'))
+                    except (KeyError,ValueError):
+                        continue
+                    if 0<=float(cur.get('start',0))-recovered<3600 and 0<=now-recovered<7*86400:
+                        state['room_illness']={};state['room_sick_activity']={}
+                        state['room_illness_cool']=recovered+7*86400
+                        self.note_room('校正了旧版本恢复后重复生成的不适状态','状态已恢复')
+                        return {}
+                    break
             return cur
         if now < float(state.get('room_illness_cool', 0)):
             return {}

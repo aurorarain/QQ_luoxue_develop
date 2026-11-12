@@ -92,6 +92,12 @@ def options(social, now, target, quiet, room, mood):
     if (social.features.feature_flag('browse') and now >= brain.get('next_browse', 0)
             and tieba.node_status().get('online')):
         choices['browse'] = {'action': 'browse', 'topic': browse.pick_forum(social)}
+    if (state.get('public_learning_enabled',True) and callable(getattr(social.features,'read_page',None))
+            and now>=brain.get('next_explore',0)):
+        from .web_search import budget_status
+        budget=budget_status(social.features)
+        if budget['can_search_network'] or budget['can_read_pages']:
+            choices['explore']={'action':'explore','label':'自主查阅公开资料'}
     routine = state.get('cognition') or {}
     cooldowns = routine.get('routine_cooldowns') or {}
     if not routine.get('routine') and room.get('sleepMode') == 'awake':
@@ -189,6 +195,12 @@ async def cycle(social, current, target, quiet=False):
         entry['outcome'] = 'failed'
         entry['result'] = type(exc).__name__
     finally:
+        history=state.get('hb_log',[])
+        if len(history)>1 and history[-1] is entry and entry.get('outcome')=='idle':
+            prev=history[-2]
+            same_day=int((prev.get('at',0)+28800)//86400)==int((entry['at']+28800)//86400)
+            if same_day and all(prev.get(k)==entry.get(k) for k in ('action','outcome','reason','result')):
+                prev.update(repeats=int(prev.get('repeats',1))+1,last_at=entry['at']);history.pop()
         social.save()
         logger.info('[luoxue_autonomy] %s %s', entry['action'], entry['outcome'])
 
@@ -211,6 +223,30 @@ async def execute(social, option, decision, entry, target, quiet):
         mind['routine'] = {'action': action, 'until': now + spec['duration'], 'started': entry['at']}
         mind.setdefault('routine_cooldowns', {})[action] = now + spec['cooldown']
         entry.update(outcome='scheduled', result='开始' + spec['label'])
+    elif action == 'explore':
+        from .web_search import automatic_context, settings
+        brain['next_explore']=now+10800
+        old_last=(state.get('web_decision_log') or [{}])[-1].get('at')
+        await automatic_context(social.features,
+            '现在独处自学。结合自己的兴趣和好奇心，想一件真想弄明白的公开知识；可以选择搜索、读公开网页，或者这轮不查。不要检索任何人的个人信息，不对外发消息。',
+            'self','luoxue-self',target)
+        decision=(state.get('web_decision_log') or [{}])[-1]
+        if decision.get('at')==old_last or decision.get('action') not in ('search','read'):
+            entry.update(outcome='idle',result='这轮没有实际查阅公开资料');return
+        if decision['action']=='read':
+            evidence=(state.get('web_page_cache') or {}).get(decision.get('url')) or {}
+            title=evidence.get('title') or decision.get('url')
+            url=evidence.get('url')
+        else:
+            config=settings(social.features)
+            evidence=(state.get('web_results') or {}).get(config['provider']+':'+decision.get('query','').casefold()) or {}
+            first=(evidence.get('items') or [{}])[0]
+            title,url=first.get('title'),first.get('url')
+        if evidence.get('error') or not title or not url:
+            entry.update(outcome='failed',result='这轮没有读到可靠的公开资料');return
+        record={'at':now,'title':str(title)[:180],'url':url,'scope':'page' if decision['action']=='read' else 'search snippets'}
+        records=state.setdefault('public_learning',[]);records.append(record);del records[:-30]
+        entry.update(result='查阅公开资料《'+record['title']+'》；'+('原页' if record['scope']=='page' else '搜索摘要')+'：'+url)
     elif action == 'read':
         title = option['title']
         book = state['book_shelf'][title]

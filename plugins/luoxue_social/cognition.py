@@ -4,15 +4,15 @@ import re
 DAY = 86400
 LIMIT = 96
 HALF_LIVES = {'valence': 5400, 'arousal': 900, 'prediction': 1200, 'stress': 2400}
-ACTIVITY = {'read': '阅读', 'browse': '浏览', 'rest': '休息', 'stretch': '舒展', 'water': '照顾植物'}
+ACTIVITY = {'read': '阅读', 'browse': '浏览', 'rest': '休息', 'stretch': '舒展', 'water': '照顾植物', 'explore':'查阅公开资料'}
 ROUTINES = {
     'stretch': {'label': '舒展一下身体', 'done': '完成了一小段伸展', 'action': 'idle',
-                'spot': 'center', 'duration': 90, 'cooldown': 2700, 'reward': .34},
+                'spot': 'center', 'duration': 90, 'cooldown': 7200, 'reward': .34},
     'water': {'label': '在后花园给花浇水', 'done': '给后花园的花浇了水', 'action': 'water',
               'spot': 'garden', 'duration': 120, 'cooldown': DAY, 'reward': .50},
 }
 ACTIVITY_RULES = {
-    'water': (42, DAY), 'read': (36, 3600), 'stretch': (26, 7200), 'browse': (21, 5400),
+    'water': (42, DAY), 'read': (36, 3600), 'stretch': (26, 7200), 'browse': (21, 5400), 'explore':(28,10800),
 }
 TOPICS = {
     '阅读': r'阅读|看书|读书|书桌|那本书|书架|章节',
@@ -31,7 +31,7 @@ SOCIAL = (
     (r'今天(?:很|太|真的)?(?:难受|沮丧|伤心)|我(?:有点|真的|很|特别)(?:难受|伤心|委屈)', '听到对方心情低落', -.18, .22),
     (r'抱抱你|给你个拥抱|想你了|来陪你一会', '收到亲近的表示', .45, .23),
 )
-NEED_BY_ACTION = {'read': '意', 'browse': '见', 'rest': '触', 'stretch': '触', 'water': '香'}
+NEED_BY_ACTION = {'read': '意', 'browse': '见', 'rest': '触', 'stretch': '触', 'water': '香', 'explore':'意'}
 FEELINGS = {
     '满足': (.46, .20, .70), '释然': (.36, .10, .80), '好奇': (.18, .55, .64),
     '亲近': (.42, .25, .58), '挂念': (-.22, .35, .32), '受挫': (-.36, .52, .36),
@@ -177,7 +177,7 @@ def activity_key(option):
 
 def learn_activity(state, option, entry, now):
     action, outcome = option['action'], entry.get('outcome')
-    if action not in ('read', 'browse') or outcome not in ('done', 'failed'):
+    if action not in ('read', 'browse', 'explore') or outcome not in ('done', 'failed'):
         return
     if outcome == 'done':
         label = entry['result']
@@ -229,7 +229,10 @@ def advance(state, room, now):
         if done:
             if action == 'stretch':
                 state['room_sleepiness'] = max(0., float(state.get('room_sleepiness', 40)) - 3)
-            remember(state, 'life', action, spec['done'], spec['reward'], .25, now, [ACTIVITY[action]])
+            repetitions=sum(1 for row in brain.get('episodes',[]) if row.get('source')=='life'
+                and row.get('key')==action and 0<=now-row.get('at',0)<8*3600)
+            reward=spec['reward']/(1+.5*repetitions)
+            remember(state, 'life', action, spec['done'], reward, .25/(1+repetitions), now, [ACTIVITY[action]])
     if room.get('sleepMode') not in ('asleep', 'nap'):
         brain.pop('sleep_since', None)
         return
@@ -315,6 +318,12 @@ def select_activity(state, choices, mood, room, quiet, now):
             continue
         base, deadline = ACTIVITY_RULES[action]
         last = started.get(action)
+        if action in ROUTINES:
+            cool=(state.get('cognition') or {}).get('routine_cooldowns',{}).get(action,0)
+            if now<cool or (last is not None and now-last<ROUTINES[action]['cooldown']):
+                continue
+        if action == 'explore' and now < brain.get('next_explore',0):
+            continue
         if action == 'read' and last is not None and now - last < 600:
             continue
         elapsed = now - last if last is not None else deadline
